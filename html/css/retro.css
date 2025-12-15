@@ -8,6 +8,7 @@
     border: 15px solid #666; /* Tlustý šedý rámeček */
     border-style: outset;
     border-radius: 0;
+    box-sizing: border-box;
 }
 
 .theme-retro .screen {

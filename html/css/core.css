@@ -1,64 +1,110 @@
-body { overflow: hidden; user-select: none; margin: 0; padding: 0; }
-
-body { overflow: hidden; user-select: none; margin: 0; padding: 0; }
+body {
+    overflow: hidden;
+    user-select: none;
+    margin: 0;
+    padding: 0;
+    /* Průhledné pozadí pro celé body, jistota je jistota */
+    background: transparent; 
+}
 
 #tablet-container {
-    position: absolute;
-    bottom: 5%; right: 5%;
-    /* Pevné rozměry 4:3 (iPad style) */
-    width: 1024px;
-    height: 768px;
+    position: fixed; /* Fixní pozice vůči oknu */
+    top: 50%;
+    left: 50%;
+    /* Centrování na střed */
+    transform: translate(-50%, -50%);
+    
+    /* PEVNÉ ROZMĚRY - iPad Ratio 4:3 */
+    width: 1024px !important;
+    height: 768px !important;
+    
+    /* Ujistíme se, že ho nic nepřepíše */
+    min-width: 1024px;
+    min-height: 768px;
+    max-width: 1024px;
+    max-height: 768px;
+    
     z-index: 1000;
+    display: none; /* Defaultně skryto, ovládá JS */
 }
 
 .tablet-frame {
-    width: 100%; height: 100%;
+    width: 100%;
+    height: 100%;
     position: relative;
     overflow: hidden;
-    display: flex; flex-direction: column;
+    display: flex;
+    flex-direction: column;
     box-sizing: border-box;
+    /* Pozadí pro frame, aby neprosvítalo nic skrz */
+    background-color: #111; 
 }
 
 #os-content {
-    display: flex; flex-direction: column;
+    display: flex;
+    flex-direction: column;
     height: 100%;
     width: 100%;
+    flex: 1; /* Roztáhni se na celou výšku */
 }
 
 .screen {
-    flex-grow: 1; /* Roztáhni se na zbytek místa */
-    position: relative; 
+    flex-grow: 1; /* Klíčové: Roztáhni se do zbylého místa */
+    height: 100%; /* Pojistka */
+    position: relative;
     overflow: hidden;
-    display: flex; flex-direction: column;
-    background-color: #000; /* Fallback barva */
+    display: flex;
+    flex-direction: column;
+    background-color: #000;
 }
 
-
+/* Zbytek zůstává pro layout aplikací */
 .status-bar {
-    height: 25px; display: flex; justify-content: space-between; align-items: center; padding: 0 10px;
-    font-size: 12px;
+    height: 30px;
+    min-height: 30px; /* Aby se nesmrsknul */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 15px;
+    font-size: 14px;
+    font-weight: bold;
+    z-index: 10;
 }
 
 .app-grid {
-    display: grid; grid-template-columns: repeat(6, 1fr);
-    padding: 20px; gap: 15px;
-    max-height: 100%; overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    grid-auto-rows: min-content; /* Aby řádky neměly kilometrovou výšku */
+    padding: 40px;
+    gap: 30px;
+    max-height: 100%;
+    overflow-y: auto;
 }
 
 .app-icon {
-    display: flex; flex-direction: column; align-items: center;
-    cursor: pointer; text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    text-align: center;
+    color: white;
 }
 
 /* Utils */
 .hidden-view { display: none !important; }
-.active-view { display: block !important; }
+.active-view { display: block !important; height: 100%; }
 
-#app-content { width: 100%; height: 100%; overflow-y: auto; }
+#app-content {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    position: relative;
+}
 
 /* Boot Screen */
 #boot-screen {
     position: absolute; top:0; left:0; width:100%; height:100%;
-    z-index: 999;
+    z-index: 9999;
     display: flex; justify-content: center; align-items: center; flex-direction: column;
+    background: black;
 }
