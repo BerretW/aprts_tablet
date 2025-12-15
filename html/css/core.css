@@ -1,9 +1,11 @@
+/* html/css/core.css */
 body {
     overflow: hidden;
     user-select: none;
     margin: 0;
     padding: 0;
     background: transparent; 
+    font-family: sans-serif;
 }
 
 #tablet-container {
@@ -12,20 +14,18 @@ body {
     left: 50%;
     transform: translate(-50%, -50%);
     
-    /* PEVNÉ ROZMĚRY */
-    width: 1024px !important;
-    height: 768px !important;
+    /* Pevné rozměry pro konzistenci */
+    width: 1000px !important;
+    height: 700px !important;
     
     z-index: 1000;
     display: none;
 }
 
-/* --- ZDE JE TA KLÍČOVÁ OPRAVA --- */
 #tablet-os-root {
     width: 100%;
     height: 100%;
 }
-/* ------------------------------- */
 
 .tablet-frame {
     width: 100%;
@@ -35,7 +35,8 @@ body {
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
-    background-color: #111; 
+    /* Base background before theme loads */
+    background-color: #000; 
 }
 
 #os-content {
@@ -44,23 +45,21 @@ body {
     height: 100%;
     width: 100%;
     flex: 1; 
+    position: relative; /* Důležité pro absolutní pozicování modálů */
 }
 
 .screen {
-    flex-grow: 1; /* Toto roztáhne obrazovku do zbylého místa */
+    flex-grow: 1;
     height: 100%;
     position: relative;
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    background-color: #000;
+    /* Padding uvnitř obrazovky, aby ikony nebyly nalepené na kraji */
 }
 
 .hidden-view {
     display: none !important;
-    visibility: hidden !important;
-    height: 0 !important;
-    overflow: hidden !important;
 }
 
 .active-view {
@@ -69,19 +68,16 @@ body {
     width: 100%;
 }
 
+/* GRID IKON NA PLOŠE */
 .app-grid {
     display: grid;
-    /* 6 sloupců, každý zabere stejnou šířku */
-    grid-template-columns: repeat(6, 1fr); 
-    /* Mezery mezi ikonami */
-    gap: 20px; 
+    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+    grid-template-rows: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 15px;
     padding: 40px;
-    
     width: 100%;
+    height: 100%;
     box-sizing: border-box;
-    
-    /* Zarovnání obsahu na začátek */
-    align-items: start;
     align-content: start;
 }
 
@@ -89,78 +85,28 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     cursor: pointer;
     text-align: center;
     color: white;
-    
-    /* Zajistí, že ikona nebude klikatelná v prázdném prostoru okolo */
-    width: auto; 
-    margin: 0 auto; 
-    padding: 10px;
-    border-radius: 10px;
-    transition: background 0.2s;
+    transition: transform 0.1s;
 }
 
-.app-icon:hover {
-    background: rgba(255, 255, 255, 0.1);
+.app-icon:active {
+    transform: scale(0.95);
 }
 
-/* APP STORE GRID */
-.store-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr); /* Dva sloupce */
-    gap: 15px;
-    padding-bottom: 20px;
-}
-
-.store-card {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 12px;
-    padding: 15px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    transition: background 0.2s;
-}
-.store-card:hover {
-    background: rgba(255, 255, 255, 0.12);
-}
-
-/* DRAG & DROP STYLY */
-.app-icon.dragging {
-    opacity: 0.5;
-    transform: scale(0.9);
-}
-
-.app-icon.drag-over {
-    border: 2px dashed rgba(255, 255, 255, 0.3);
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
-}
-
-/* KALENDÁŘ */
-.calendar-day {
-    aspect-ratio: 1/1;
-    display: flex; 
-    flex-direction: column;
+/* MODÁLNÍ OKNO (KALENDÁŘ ATD) */
+#calendar-modal {
+    position: absolute; 
+    top: 0; 
+    left: 0; 
+    width: 100%; 
+    height: 100%; 
+    background: rgba(0,0,0,0.7); 
+    z-index: 100; 
+    display: none; 
     justify-content: center; 
     align-items: center;
-    border-radius: 50%;
-    font-size: 14px;
-    cursor: pointer;
-    position: relative;
-    transition: background 0.2s;
-}
-.calendar-day:hover {
-    background: rgba(255,255,255,0.1) !important;
-}
-.event-dot {
-    width: 6px; 
-    height: 6px; 
-    background: #0984e3; 
-    border-radius: 50%; 
-    position: absolute; 
-    bottom: 5px;
+    backdrop-filter: blur(5px);
 }

@@ -49,9 +49,8 @@ end)
 -- ====================================================================
 
 RegisterNetEvent('aprts_tablet:client:loadTablet')
-AddEventHandler('aprts_tablet:client:loadTablet', function(model, dbData)
-    -- model = 'tablet_basic' nebo 'tablet_pro'
-    -- dbData = { installedApps = {...}, background = "url", ... }
+AddEventHandler('aprts_tablet:client:loadTablet', function(serial, model, dbData)
+    print('[Client Debug] Načítám tablet. Serial:', serial, 'Model:', model) -- DEBUG
 
     local tabletConfig = Config.Tablets[model]
     if not tabletConfig then 
@@ -62,20 +61,19 @@ AddEventHandler('aprts_tablet:client:loadTablet', function(model, dbData)
 
     if not isTabletOpen then
         isTabletOpen = true
+        currentSerial = serial -- !!! DŮLEŽITÉ: Uložíme serial do globální proměnné !!!
         SetNuiFocus(true, true)
 
-        -- Sloučíme Config data (hardware) s DB daty (software)
         local payload = {
             action = "bootSystem",
-            -- Hardware stats (z Configu)
             os = tabletConfig.os,
             storage = tabletConfig.storage or 1024,
             bootTime = tabletConfig.bootTime,
             
-            -- User data (z SQL)
-            serial = currentSerial,
+            serial = serial,
             installedApps = dbData.installedApps, 
-            wallpaper = dbData.background or tabletConfig.wallpaper -- Priorita DB, pak Config
+            wallpaper = dbData.background or tabletConfig.wallpaper,
+            calendarEvents = dbData.calendarEvents or {} -- Ujištění, že posíláme kalendář
         }
 
         SendNUIMessage(payload)
@@ -136,9 +134,14 @@ end)
 
 -- Synchronizace dat do cloudu (SQL)
 RegisterNUICallback('syncData', function(data, cb)
+    print('[Client Debug] Volán syncData z JS.') -- DEBUG
+    
     if currentSerial then
-        -- data obsahuje { installedApps: [...], background: ... }
+        print('[Client Debug] Odesílám data na server pro serial:', currentSerial) -- DEBUG
+        -- data obsahuje { installedApps, background, calendarEvents }
         TriggerServerEvent('aprts_tablet:server:saveTabletData', currentSerial, data)
+    else
+        print('^1[Client Error] Pokus o uložení dat, ale currentSerial je NIL!^0')
     end
     cb('ok')
 end)
@@ -246,4 +249,15 @@ CreateThread(function()
             Wait(1000)
         end
     end
+end)
+
+RegisterCommand('fixtablet', function()
+    isTabletOpen = false
+    SetNuiFocus(false, false)
+    StopTabletAnimation()
+    if tabletProp then
+        DeleteEntity(tabletProp)
+        tabletProp = nil
+    end
+    print("[Tablet] Resetován příkazem /fixtablet")
 end)

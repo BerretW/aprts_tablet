@@ -73,3 +73,188 @@
     display: flex; /* Zobrazit pouze v retro tématu */
     justify-content: space-between;
 }
+
+/* =========================================
+   RETRO CALENDAR STYLES
+   ========================================= */
+
+/* Wrapper a hlavička */
+.theme-retro .calendar-wrapper {
+    background-color: #000;
+    color: #00ff00;
+    font-family: 'Courier New', Courier, monospace;
+    padding: 10px;
+}
+
+.theme-retro .calendar-header {
+    border-bottom: 2px solid #00ff00;
+    padding-bottom: 15px;
+    margin-bottom: 15px;
+    text-transform: uppercase;
+}
+
+.theme-retro .calendar-header h2 {
+    font-size: 20px;
+    letter-spacing: 2px;
+    text-shadow: 2px 2px 0 #003300;
+}
+
+/* Tlačítka navigace [<] [>] */
+.theme-retro .month-nav button {
+    background: #000;
+    border: 1px solid #00ff00;
+    color: #00ff00;
+    width: 30px;
+    height: 30px;
+    border-radius: 0; /* Žádné kulaté rohy */
+    box-shadow: 4px 4px 0 #004400; /* Hrubý stín */
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+}
+
+.theme-retro .month-nav button:active {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0 #004400;
+}
+
+.theme-retro .today-display span {
+    font-family: 'Courier New', monospace;
+}
+
+/* Grid a Dny */
+.theme-retro .calendar-grid-header {
+    border-bottom: 2px dashed #004400;
+    font-size: 14px;
+    padding-bottom: 5px;
+    margin-bottom: 10px;
+}
+
+.theme-retro .calendar-day {
+    background: #000;
+    border: 1px solid #003300; /* Tmavě zelený rámeček */
+    border-radius: 0;
+    color: #00aa00;
+    min-height: 70px; /* Pevná výška pro retro look */
+}
+
+.theme-retro .calendar-day:hover {
+    background: #001100;
+    border-color: #00ff00;
+    color: #00ff00;
+    cursor: crosshair; /* Retro kurzor */
+}
+
+/* Dnešní den - Inverzní barvy */
+.theme-retro .calendar-day.today {
+    background: #00ff00 !important;
+    color: #000 !important;
+    border: 2px solid #00ff00;
+    box-shadow: none;
+}
+.theme-retro .calendar-day.today .day-num {
+    color: #000;
+    font-weight: 900;
+}
+
+/* Indikátor události (čtvereček místo tečky) */
+.theme-retro .event-dots {
+    width: 10px;
+    height: 10px;
+    background: #00ff00;
+    border-radius: 0; /* Hranatý bod */
+    box-shadow: 0 0 5px #00ff00;
+    margin: 5px;
+}
+.theme-retro .calendar-day.today .event-dots {
+    background: #000; /* Černý bod na zeleném pozadí */
+    box-shadow: none;
+}
+
+/* Scrollbar pro Retro */
+.theme-retro .calendar-body::-webkit-scrollbar { width: 10px; }
+.theme-retro .calendar-body::-webkit-scrollbar-track { background: #001100; border-left: 1px solid #00ff00; }
+.theme-retro .calendar-body::-webkit-scrollbar-thumb { background: #00ff00; border: 1px solid #000; }
+
+/* =========================================
+   RETRO MODAL (Okno události)
+   ========================================= */
+
+.theme-retro #calendar-modal {
+    background: rgba(0, 20, 0, 0.9); /* Tmavě zelený overlay */
+    backdrop-filter: none;
+}
+
+.theme-retro #calendar-modal .modal-content {
+    background: #000;
+    border: 4px double #00ff00; /* Dvojitý rámeček */
+    border-radius: 0;
+    box-shadow: 10px 10px 0 #004400;
+    font-family: 'Courier New', monospace;
+    width: 400px;
+}
+
+.theme-retro #modal-date-title {
+    background: #00ff00;
+    color: #000;
+    padding: 5px;
+    text-align: center;
+    text-transform: uppercase;
+    font-weight: bold;
+    margin-top: -20px;
+    margin-left: -20px;
+    margin-right: -20px;
+    margin-bottom: 20px;
+    border-bottom: 4px double #000;
+}
+
+/* Seznam událostí */
+.theme-retro #day-events-list {
+    background: #000;
+    border: 1px solid #004400;
+    border-radius: 0;
+}
+
+.theme-retro .event-item {
+    background: #000;
+    border-bottom: 1px dashed #004400;
+    color: #00ff00;
+    border-radius: 0;
+}
+.theme-retro .event-item .time { color: #00ff00; font-weight: bold; }
+.theme-retro .event-item .delete-btn { color: #00ff00; }
+.theme-retro .event-item .delete-btn:hover { background: #00ff00; color: #000; }
+
+/* Formulář */
+.theme-retro .new-event-form input {
+    background: #000;
+    border: 1px solid #00ff00;
+    color: #00ff00;
+    border-radius: 0;
+    font-family: 'Courier New', monospace;
+}
+.theme-retro .new-event-form input:focus {
+    outline: none;
+    box-shadow: 0 0 5px #00ff00;
+}
+
+.theme-retro .new-event-form button {
+    background: #000;
+    border: 1px solid #00ff00;
+    color: #00ff00;
+    border-radius: 0;
+}
+.theme-retro .new-event-form button:hover {
+    background: #00ff00;
+    color: #000;
+}
+
+.theme-retro .btn-cancel {
+    border: 1px solid #00ff00;
+    color: #00ff00;
+    border-radius: 0;
+    text-transform: uppercase;
+}
+.theme-retro .btn-cancel:hover {
+    background: #00ff00;
+    color: #000;
+}

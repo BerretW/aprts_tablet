@@ -2,24 +2,21 @@ local QBCore = exports['qb-core']:GetCoreObject()
 
 -- Pomocná funkce pro načtení tabletu z DB a odeslání klientovi
 local function LoadAndOpenTablet(source, serial, model)
-    -- 1. Načteme data z SQL
     local result = exports.oxmysql:singleSync('SELECT * FROM player_tablets WHERE serial = ?', {serial})
     
     local tabletData = {}
     local tabletModel = model or 'tablet_basic'
 
     if result then
-        -- Tablet existuje v DB
         tabletData = json.decode(result.tablet_data) or {}
-        tabletModel = result.model -- Použijeme model uložený v DB (pokud se liší)
+        tabletModel = result.model
     else
-        -- Tablet není v DB -> vytvoříme dummy data, aby se otevřel
-        print('^3[Tablet] Varování: Tablet '..serial..' nebyl nalezen v DB. Načítám dočasná data.^0')
-        tabletData = { installedApps = {'store', 'settings', 'calendar'}, background = 'none' }
+        print('^3[Tablet] Varování: Tablet '..serial..' nebyl nalezen v DB.^0')
+        tabletData = { installedApps = {'store', 'settings', 'calendar'}, background = 'none', calendarEvents = {} }
     end
 
-    -- 2. Pošleme data klientovi k otevření
-    TriggerClientEvent('aprts_tablet:client:loadTablet', source, tabletModel, tabletData)
+    -- !!! ZMĚNA ZDE: Přidali jsme 'serial' jako druhý argument !!!
+    TriggerClientEvent('aprts_tablet:client:loadTablet', source, serial, tabletModel, tabletData)
 end
 
 -- ====================================================================
@@ -48,6 +45,8 @@ end)
 
 -- Uložení dat
 RegisterNetEvent('aprts_tablet:server:saveTabletData', function(serial, newData)
+    print('^2[Tablet] Ukládání dat pro tablet: '..serial..'^0')
+    print(json.encode(newData))
     exports.oxmysql:update('UPDATE player_tablets SET tablet_data = ? WHERE serial = ?', {
         json.encode(newData), serial
     })
