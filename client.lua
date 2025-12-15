@@ -25,24 +25,14 @@ end
 
 -- Export pro OX Inventory (v items.lua nastavit: export = 'aprts_tablet.useTablet')
 exports('useTablet', function(data)
-    -- data obsahuje informace o itemu (slot, metadata, name...)
-    if data and data.metadata and data.metadata.serial then
-        local serial = data.metadata.serial
-        currentSerial = serial
-        
-        -- Animace
+    -- data obsahuje: slot, name, count... ale metadata chybí.
+    -- Proto pošleme na server jen číslo slotu.
+    if data and data.slot then
         StartTabletAnimation()
-
-        -- Požádáme server o data k tomuto sériovému číslu
-        -- Server vrátí event 'aprts_tablet:client:loadTablet'
-        TriggerServerEvent('aprts_tablet:server:getTabletData', serial)
+        -- Pošleme serveru číslo slotu, ať si sériové číslo najde sám
+        TriggerServerEvent('aprts_tablet:server:openBySlot', data.slot)
     else
-        -- Fallback pro itemy bez metadat (např. admin spawnuté bez sériovky)
-        print('^1[Tablet] Chyba: Tablet nemá sériové číslo!^0')
-        -- Můžeme vygenerovat dočasné číslo nebo odmítnout otevření
-        currentSerial = "TEMP-"..math.random(1000,9999)
-        StartTabletAnimation()
-        TriggerServerEvent('aprts_tablet:server:getTabletData', currentSerial)
+        print('^1[Tablet] Chyba: Neplatná data z inventáře!^0')
     end
 end)
 
