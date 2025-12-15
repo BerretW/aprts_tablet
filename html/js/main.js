@@ -1,6 +1,6 @@
+    // NUI Listeners (Lua -> JS)
 $(document).ready(function() {
     
-    // NUI Listeners (Lua -> JS)
     window.addEventListener('message', function(event) {
         let data = event.data;
 
@@ -10,6 +10,12 @@ $(document).ready(function() {
                 System.boot(data);
                 break;
             
+            // NOVÉ: Aktualizace času a Wi-Fi
+            case 'updateInfobar':
+                UI.updateStatusBar(data.time, data.wifi, data.wifiName);
+                AppState.hasInternet = data.wifi; 
+                break;
+
             case 'close':
                 AppState.isOpen = false;
                 UI.toggleTablet(false);

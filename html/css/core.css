@@ -3,30 +3,29 @@ body {
     user-select: none;
     margin: 0;
     padding: 0;
-    /* Průhledné pozadí pro celé body, jistota je jistota */
     background: transparent; 
 }
 
 #tablet-container {
-    position: fixed; /* Fixní pozice vůči oknu */
+    position: fixed;
     top: 50%;
     left: 50%;
-    /* Centrování na střed */
     transform: translate(-50%, -50%);
     
-    /* PEVNÉ ROZMĚRY - iPad Ratio 4:3 */
+    /* PEVNÉ ROZMĚRY */
     width: 1024px !important;
     height: 768px !important;
     
-    /* Ujistíme se, že ho nic nepřepíše */
-    min-width: 1024px;
-    min-height: 768px;
-    max-width: 1024px;
-    max-height: 768px;
-    
     z-index: 1000;
-    display: none; /* Defaultně skryto, ovládá JS */
+    display: none;
 }
+
+/* --- ZDE JE TA KLÍČOVÁ OPRAVA --- */
+#tablet-os-root {
+    width: 100%;
+    height: 100%;
+}
+/* ------------------------------- */
 
 .tablet-frame {
     width: 100%;
@@ -36,7 +35,6 @@ body {
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
-    /* Pozadí pro frame, aby neprosvítalo nic skrz */
     background-color: #111; 
 }
 
@@ -45,12 +43,12 @@ body {
     flex-direction: column;
     height: 100%;
     width: 100%;
-    flex: 1; /* Roztáhni se na celou výšku */
+    flex: 1; 
 }
 
 .screen {
-    flex-grow: 1; /* Klíčové: Roztáhni se do zbylého místa */
-    height: 100%; /* Pojistka */
+    flex-grow: 1; /* Toto roztáhne obrazovku do zbylého místa */
+    height: 100%;
     position: relative;
     overflow: hidden;
     display: flex;
@@ -58,53 +56,111 @@ body {
     background-color: #000;
 }
 
-/* Zbytek zůstává pro layout aplikací */
-.status-bar {
-    height: 30px;
-    min-height: 30px; /* Aby se nesmrsknul */
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0 15px;
-    font-size: 14px;
-    font-weight: bold;
-    z-index: 10;
+.hidden-view {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    overflow: hidden !important;
+}
+
+.active-view {
+    display: block !important;
+    height: 100%;
+    width: 100%;
 }
 
 .app-grid {
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    grid-auto-rows: min-content; /* Aby řádky neměly kilometrovou výšku */
+    /* 6 sloupců, každý zabere stejnou šířku */
+    grid-template-columns: repeat(6, 1fr); 
+    /* Mezery mezi ikonami */
+    gap: 20px; 
     padding: 40px;
-    gap: 30px;
-    max-height: 100%;
-    overflow-y: auto;
+    
+    width: 100%;
+    box-sizing: border-box;
+    
+    /* Zarovnání obsahu na začátek */
+    align-items: start;
+    align-content: start;
 }
 
 .app-icon {
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     cursor: pointer;
     text-align: center;
     color: white;
+    
+    /* Zajistí, že ikona nebude klikatelná v prázdném prostoru okolo */
+    width: auto; 
+    margin: 0 auto; 
+    padding: 10px;
+    border-radius: 10px;
+    transition: background 0.2s;
 }
 
-/* Utils */
-.hidden-view { display: none !important; }
-.active-view { display: block !important; height: 100%; }
+.app-icon:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
 
-#app-content {
-    width: 100%;
-    height: 100%;
-    overflow-y: auto;
+/* APP STORE GRID */
+.store-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr); /* Dva sloupce */
+    gap: 15px;
+    padding-bottom: 20px;
+}
+
+.store-card {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: background 0.2s;
+}
+.store-card:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+/* DRAG & DROP STYLY */
+.app-icon.dragging {
+    opacity: 0.5;
+    transform: scale(0.9);
+}
+
+.app-icon.drag-over {
+    border: 2px dashed rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+}
+
+/* KALENDÁŘ */
+.calendar-day {
+    aspect-ratio: 1/1;
+    display: flex; 
+    flex-direction: column;
+    justify-content: center; 
+    align-items: center;
+    border-radius: 50%;
+    font-size: 14px;
+    cursor: pointer;
     position: relative;
+    transition: background 0.2s;
 }
-
-/* Boot Screen */
-#boot-screen {
-    position: absolute; top:0; left:0; width:100%; height:100%;
-    z-index: 9999;
-    display: flex; justify-content: center; align-items: center; flex-direction: column;
-    background: black;
+.calendar-day:hover {
+    background: rgba(255,255,255,0.1) !important;
+}
+.event-dot {
+    width: 6px; 
+    height: 6px; 
+    background: #0984e3; 
+    border-radius: 50%; 
+    position: absolute; 
+    bottom: 5px;
 }

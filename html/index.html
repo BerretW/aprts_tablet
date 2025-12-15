@@ -1,59 +1,76 @@
 <!DOCTYPE html>
 <html lang="cs">
-<head>
-    <meta charset="UTF-8">
+  <head>
+    <meta charset="UTF-8" />
     <title>DT Tablet System</title>
-    
+
     <!-- Knihovny -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+    />
 
     <!-- Naše styly -->
-    <link rel="stylesheet" href="css/core.css">
-    <link rel="stylesheet" href="css/modern.css">
-    <link rel="stylesheet" href="css/retro.css">
-</head>
-<body>
+    <link rel="stylesheet" href="css/core.css" />
+    <link rel="stylesheet" href="css/modern.css" />
+    <link rel="stylesheet" href="css/retro.css" />
+  </head>
+  <body>
+    <div id="tablet-container" style="display: none">
+      <!-- Zde JS nastavuje class="theme-modern" nebo "theme-retro" -->
+      <div id="tablet-os-root">
+        <div class="tablet-frame">
+          <!-- Boot Screen -->
+          <div id="boot-screen">
+            <div id="boot-logo"></div>
+          </div>
 
-    <div id="tablet-container" style="display: none;">
-        <!-- Zde JS nastavuje class="theme-modern" nebo "theme-retro" -->
-        <div id="tablet-os-root">
-            
-            <div class="tablet-frame">
-                <!-- Boot Screen -->
-                <div id="boot-screen">
-                    <div id="boot-logo"></div>
-                </div>
+          <!-- System Content -->
+          <div id="os-content" style="display: none; height: 100%">
+            <div class="status-bar">
+              <span
+                ><i class="fas fa-signal"></i>
+                <span id="network-name">Hledání...</span></span
+              >
+              <span id="clock">--:--</span>
+            </div>
 
-                <!-- System Content -->
-                <div id="os-content" style="display:none; height: 100%;">
-                    
-                    <div class="status-bar">
-                        <span><i class="fas fa-signal"></i> 4G</span>
-                        <span id="clock">12:00</span>
-                    </div>
-<div class="screen">
-    <div id="home-screen" class="active-view">
-        <div class="app-grid" id="app-grid"></div>
-    </div>
-    
-    <!-- RETRO NAVIGACE (Vloženo sem) -->
-    <div class="retro-nav-bar hidden-view" onclick="System.goHome()">
-        <span>&lt; ZPĚT NA PLOCHU</span>
-        <span>MENU</span>
-    </div>
+            <div class="screen">
+              <!-- 1. DOMOVSKÁ OBRAZOVKA (Rodič ikon) -->
+              <div id="home-screen" class="active-view">
+                <div class="app-grid" id="app-grid"></div>
+              </div>
 
-    <div id="app-frame" class="hidden-view">
-        <div id="app-content"></div>
+              <!-- ZDE JE KONEC DIVU home-screen -->
+              <!-- NÁSLEDUJE RETRO NAVIGACE -->
+
+              <div class="retro-nav-bar hidden-view" onclick="System.goHome()">
+                <span>&lt; ZPĚT</span>
+                <span>MENU</span>
+              </div>
+
+              <!-- 2. OKNO APLIKACE (Musí být MIMO home-screen) -->
+              <div id="app-frame" class="hidden-view">
+                <div id="app-content"></div>
+              </div>
+              <div id="calendar-modal" class="hidden-view" style="position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.8); z-index: 50; display: none; justify-content: center; align-items: center;">
+    <div style="background: #222; padding: 20px; border-radius: 12px; width: 300px; text-align: center; border: 1px solid #444;">
+        <h3 id="modal-date-title" style="margin-top: 0; color: white;">Událost</h3>
+        <input type="text" id="event-input" placeholder="Např. Schůzka s právníkem" style="width: 100%; padding: 10px; margin: 10px 0; background: #111; border: 1px solid #444; color: white; border-radius: 6px;">
+        <div style="display: flex; gap: 10px; justify-content: center;">
+            <button onclick="System.saveCalendarEvent()" style="background: #0984e3; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer;">Uložit</button>
+            <button onclick="$('#calendar-modal').fadeOut(100)" style="background: #d63031; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer;">Zrušit</button>
+        </div>
     </div>
 </div>
-
-                    <!-- Fyzické tlačítko (jen pro modern) -->
-                    <div class="home-button"></div>
-                </div>
             </div>
-            
+
+            <!-- Fyzické tlačítko -->
+            <div class="home-button"></div>
+          </div>
         </div>
+      </div>
     </div>
 
     <!-- Naše skripty (v přesném pořadí) -->
@@ -61,6 +78,5 @@
     <script src="js/ui.js"></script>
     <script src="js/system.js"></script>
     <script src="js/main.js"></script>
-
-</body>
+  </body>
 </html>

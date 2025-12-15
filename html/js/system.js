@@ -1,44 +1,39 @@
+// html/js/system.js
+
 const System = {
-    // === BOOT SEQUENCE ===
+    // === BOOT & INIT ===
     boot: (payload) => {
-        // Uložení dat přijatých z LUA (DB + Config)
         AppState.currentData = payload; 
         
-        // Pokud v DB nejsou žádné aplikace, dáme tam základ.
+        // Načtení aplikací
         AppState.installedApps = (payload.installedApps && payload.installedApps.length > 0) 
             ? payload.installedApps 
             : ['store', 'settings', 'calendar'];
 
-        // Nastavení konfigurace (OS, Storage atd.)
+        // Načtení kalendáře (pokud existuje, jinak prázdný objekt)
+        AppState.calendarEvents = payload.calendarEvents || {};
+
         AppState.currentConfig = {
             os: payload.os,
             storage: payload.storage || 1024,
             bootTime: payload.bootTime || 2000,
-            wallpaper: payload.wallpaper // Tapeta z DB (nebo default z configu)
+            wallpaper: payload.wallpaper
         };
 
-        // 1. Reset zobrazení (Vždy začít na ploše, zavřít aplikace)
         AppState.activeApp = null;
-        $('#app-frame').addClass('hidden-view').removeClass('active-view');
-        $('#home-screen').removeClass('hidden-view').addClass('active-view');
-        $('.retro-nav-bar').hide(); // Skrýt retro lištu
-        $('#app-content').empty();
-
-        // 2. Aplikovat vzhled
+        UI.showAppFrame(false);
         UI.applyTheme(AppState.currentConfig.os, AppState.currentConfig.wallpaper);
         UI.toggleTablet(true);
 
-        // 3. Spustit boot animaci
         $('#os-content').hide();
         $('#boot-screen').show();
 
         const bootText = AppState.currentConfig.os === 'retro' 
-            ? `> BIOS DATE: 01/01/1995<br>> CPU: 66MHz<br>> MEMORY TEST... ${AppState.currentConfig.storage}KB OK<br>> MOUNTING SERIAL: ${payload.serial || 'UNK'}<br>> BOOTING...`
+            ? `> BOOT SEQUENCE INITIATED...`
             : '<div class="loader"></div>';
         
         $('#boot-logo').html(bootText);
 
-        // 4. Po uplynutí boot času zobrazit plochu
         setTimeout(() => {
             $('#boot-screen').fadeOut(200);
             $('#os-content').fadeIn(200);
@@ -46,9 +41,8 @@ const System = {
         }, AppState.currentConfig.bootTime);
     },
 
-    // === NAVIGACE A SYSTÉM ===
+    // === CORE ===
 
-    // Otevření aplikace
     openApp: (appName) => {
         const app = AppState.allRegisteredApps[appName];
         if (!app) return;
@@ -56,17 +50,14 @@ const System = {
         AppState.activeApp = appName;
         UI.showAppFrame(true);
 
-        // SPECIALITA PRO RETRO TABLET:
-        // Pokud je OS retro, zobrazíme nahoře lištu pro návrat, 
-        // protože retro tablet nemá "Home Button" gesto ani tlačítko dole.
         if (AppState.currentConfig.os === 'retro') {
-            $('.retro-nav-bar').css('display', 'flex'); // Zobrazit flexboxem
+            $('.retro-nav-bar').css('display', 'flex'); 
         }
 
-        // Rozcestník: Je to systémová appka nebo externí resource?
         switch (appName) {
             case 'store':
-                System.renderStore();
+                if (!AppState.hasInternet) { System.renderNoInternet(); } 
+                else { System.renderStore(); }
                 break;
             case 'settings':
                 System.renderSettings();
@@ -75,199 +66,222 @@ const System = {
                 System.renderCalendar();
                 break;
             default:
-                // Externí aplikace -> voláme Lua
                 $.post('https://aprts_tablet/openAppRequest', JSON.stringify({ appId: appName }));
                 break;
         }
     },
 
-    // Návrat na plochu (Voláno tlačítkem Domů nebo Retro lištou)
     goHome: () => {
         AppState.activeApp = null;
-        UI.showAppFrame(false); // UI helper přepne visibility
-        
-        // Skrýt retro navigaci
-        $('.retro-nav-bar').hide();
-        
-        // Vyčistit obsah aplikace, aby neběžel na pozadí
-        $('#app-content').html('');
+        UI.showAppFrame(false); 
+        $('#app-content').empty();
+        $('#calendar-modal').hide(); // Zavřít modal kdyby byl otevřený
     },
 
-    // Synchronizace dat do databáze (volat při každé změně)
     syncToCloud: () => {
         const dataToSave = {
             installedApps: AppState.installedApps,
-            background: AppState.currentConfig.wallpaper
+            background: AppState.currentConfig.wallpaper,
+            calendarEvents: AppState.calendarEvents // Ukládáme i kalendář
         };
-
-        // Odeslání do LUA -> Server -> MySQL
         $.post('https://aprts_tablet/syncData', JSON.stringify(dataToSave));
     },
 
+    // === APPS ===
 
-    // === INTERNÍ APLIKACE ===
+    // 1. APP STORE (FIXNUTO)
+    renderNoInternet: () => {
+        $('#app-content').html(`
+            <div style="display:flex; flex-direction:column; justify-content:center; align-items:center; height:100%; color: inherit;">
+                <i class="fas fa-wifi" style="font-size: 64px; margin-bottom: 20px; opacity: 0.3;"></i>
+                <h2>Offline</h2>
+                <p style="opacity: 0.6;">Připojte se k Wi-Fi pro přístup.</p>
+            </div>
+        `);
+    },
 
-    // 1. APP STORE
     renderStore: () => {
-        let html = `<div style="padding:20px"><h2>Software Center</h2><hr>`;
+        let currentNet = $('#network-name').text() || "Neznámá síť";
+
+        // Použijeme flexbox layout pro celou stránku obchodu
+        let html = `
+        <div style="padding: 25px; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; color: white;">
+            
+            <div style="margin-bottom: 15px;">
+                <h1 style="margin: 0; font-size: 28px;">App Store</h1>
+                <span style="font-size: 13px; opacity: 0.5; display:block; margin-top:5px;"><i class="fas fa-wifi"></i> ${currentNet}</span>
+            </div>
+
+            <!-- Tady bude scrollable obsah -->
+            <div style="flex-grow: 1; overflow-y: auto; padding-right: 5px;">
+                <div class="store-grid">
+        `;
         
-        $.each(AppState.allRegisteredApps, function(key, app) {
-            // Skryjeme systémové aplikace, ty nejde instalovat/odinstalovat
+        Object.keys(AppState.allRegisteredApps).forEach(key => {
             if(['store', 'settings', 'calendar'].includes(key)) return;
 
+            let app = AppState.allRegisteredApps[key];
             const isInstalled = AppState.installedApps.includes(key);
             
-            // Styl tlačítka podle stavu
-            const btnText = isInstalled ? "Nainstalováno" : "Stáhnout";
-            const btnStyle = isInstalled 
-                ? "background:#555; color:#ccc; cursor:default;" 
-                : "background:#0984e3; color:white; cursor:pointer;";
+            const btnText = isInstalled ? "OPEN" : "GET";
+            const btnBg = isInstalled ? "rgba(255,255,255,0.1)" : "#0984e3";
+            const btnColor = isInstalled ? "#aaa" : "#fff";
+            
+            const action = isInstalled ? "" : `onclick="System.installApp('${key}')"`;
 
             html += `
-            <div style="margin-bottom: 15px; background: rgba(255,255,255,0.05); padding: 15px; border: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center;">
-                <div style="display:flex; align-items:center; gap: 15px;">
-                    <i class="${app.iconClass}" style="font-size: 24px; width:30px; text-align:center;"></i> 
+            <div class="store-card">
+                <div style="display:flex; align-items:center; gap: 12px;">
+                    <div style="background: ${app.color || '#333'}; width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px;">
+                        <i class="${app.iconClass}" style="color: white;"></i>
+                    </div>
                     <div>
-                        <div style="font-weight:bold; font-size:16px;">${app.label}</div>
-                        <div style="font-size:12px; opacity:0.7;">Verze 1.0</div>
+                        <div style="font-weight: 600; font-size: 15px;">${app.label}</div>
+                        <div style="font-size: 11px; opacity: 0.5;">Utility</div>
                     </div>
                 </div>
-                <button onclick="System.installApp('${key}')" style="${btnStyle} border:none; padding:8px 20px; border-radius:4px;" ${isInstalled ? 'disabled' : ''}>
+                <button ${action} style="background: ${btnBg}; color: ${btnColor}; border: none; padding: 6px 16px; border-radius: 20px; font-weight: 700; font-size: 12px; cursor: pointer;">
                     ${btnText}
                 </button>
             </div>`;
         });
         
-        html += `</div>`;
+        html += `</div></div></div>`; // Uzavření divů
         $('#app-content').html(html);
     },
 
     installApp: (appName) => {
-        if (!AppState.installedApps.includes(appName)) {
-            // Simulace stahování
-            $('#app-content').html('<div style="display:flex; height:100%; justify-content:center; align-items:center;"><h2>Stahování...</h2></div>');
-            
-            setTimeout(() => {
-                AppState.installedApps.push(appName);
-                System.syncToCloud(); // Uložit do DB
-                System.renderStore(); // Vrátit se do obchodu
-            }, 1000);
-        }
-    },
+        if (!AppState.hasInternet) return System.renderNoInternet();
 
-
-    // 2. NASTAVENÍ (SETTINGS)
-    renderSettings: () => {
-        // Výpočet využití místa (každá appka bere 50MB)
-        let storageUsed = AppState.installedApps.length * 50;
-        let storageTotal = AppState.currentConfig.storage;
-        let percent = Math.min((storageUsed / storageTotal) * 100, 100);
-        let barColor = AppState.currentConfig.os === 'retro' ? '#00ff00' : '#0984e3';
-
-        let html = `
-        <div style="padding: 40px; max-width: 600px; margin: 0 auto;">
-            <h1>Nastavení</h1>
-            <hr style="opacity: 0.3; margin: 20px 0;">
-            
-            <div style="margin-bottom: 30px;">
-                <h3>O zařízení</h3>
-                <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
-                    <p><strong>Sériové číslo:</strong> ${AppState.currentData.serial || 'N/A'}</p>
-                    <p><strong>Model:</strong> ${AppState.currentConfig.os === 'retro' ? 'RetroPad 95' : 'iFruit Pad Pro'}</p>
-                    <p><strong>Operační systém:</strong> ${AppState.currentConfig.os.toUpperCase()}OS v2.4</p>
-                </div>
+        // Simulace loaderu přímo v tlačítku by byla lepší, ale pro jednoduchost překryjeme obsah
+        $('#app-content').html(`
+            <div style="display:flex; height:100%; justify-content:center; align-items:center; flex-direction:column; color:white;">
+                <i class="fas fa-circle-notch fa-spin" style="font-size:32px; margin-bottom:15px; color: #0984e3;"></i>
+                <div>Instalace...</div>
             </div>
-
-            <div style="margin-bottom: 30px;">
-                <h3>Úložiště</h3>
-                <div style="background: #333; width: 100%; height: 20px; border-radius: 10px; overflow: hidden; margin: 10px 0;">
-                    <div style="background: ${barColor}; width: ${percent}%; height: 100%; transition: width 0.5s;"></div>
-                </div>
-                <div style="display:flex; justify-content:space-between; font-size: 14px; opacity: 0.8;">
-                    <span>Využito: ${storageUsed} MB</span>
-                    <span>Celkem: ${storageTotal} MB</span>
-                </div>
-            </div>
-
-            <div style="margin-top: 50px; text-align: center;">
-                <button onclick="System.factoryReset()" style="background: #d63031; color: white; border: none; padding: 15px 30px; border-radius: 5px; cursor: pointer; font-size: 16px;">
-                    <i class="fas fa-trash"></i> Obnovit tovární nastavení
-                </button>
-                <p style="font-size: 12px; color: #d63031; margin-top: 10px;">Pozor: Tato akce smaže všechna data a aplikace.</p>
-            </div>
-        </div>
-        `;
-        $('#app-content').html(html);
-    },
-
-    factoryReset: () => {
-        $('#app-content').html('<div style="display:flex; height:100%; justify-content:center; align-items:center; flex-direction:column;"><h2 style="color:red">Formátování disku...</h2><p>Prosím nevypínejte zařízení.</p></div>');
+        `);
         
         setTimeout(() => {
-             // Reset pole aplikací na základ
-             AppState.installedApps = ['store', 'settings', 'calendar'];
-             
-             // Odeslat reset na server
-             System.syncToCloud();
-
-             // Re-boot systému pro efekt
-             setTimeout(() => {
-                System.boot(AppState.currentData);
-             }, 1500);
-        }, 3000);
+            if (!AppState.installedApps.includes(appName)) {
+                AppState.installedApps.push(appName);
+                System.syncToCloud();
+            }
+            System.renderStore();
+        }, 1000);
     },
 
-
-    // 3. KALENDÁŘ
+    // 2. KALENDÁŘ (S EVENTS)
     renderCalendar: () => {
         let date = new Date();
         let days = ['Ne', 'Po', 'Út', 'St', 'Čt', 'Pá', 'So'];
         let dayName = days[date.getDay()];
+        let fullDate = `${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()}`;
         
-        // Barvy pro aktuální den
-        let activeBg = AppState.currentConfig.os === 'retro' ? '#00ff00' : '#e84393';
-        let activeColor = AppState.currentConfig.os === 'retro' ? 'black' : 'white';
-
         let html = `
-        <div style="padding: 20px; height: 100%; display: flex; flex-direction: column;">
+        <div style="padding: 20px; height: 100%; display: flex; flex-direction: column; color: inherit; box-sizing: border-box;">
             <div style="text-align: center; margin-bottom: 20px;">
-                <h1 style="font-size: 48px; margin: 0;">${date.getDate()}</h1>
-                <h3 style="margin: 0; text-transform: uppercase; opacity: 0.7;">${dayName} / ${(date.getMonth() + 1)} / ${date.getFullYear()}</h3>
+                <h1 style="font-size: 60px; margin: 0; font-weight: 300;">${date.getDate()}</h1>
+                <h3 style="margin: 0; text-transform: uppercase; opacity: 0.7;">${dayName}</h3>
             </div>
             
-            <div style="flex-grow: 1; overflow-y: auto;">
-                <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; padding: 10px;">
-                    <!-- Hlavička dnů -->
-                    ${days.map(d => `<div style="text-align:center; font-weight:bold;">${d}</div>`).join('')}
-                    
-                    <!-- Dny v měsíci (zjednodušeně 1-30) -->
+            <div style="flex-grow: 1; overflow-y: hidden;">
+                <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; padding: 10px;">
+                    ${days.map(d => `<div style="text-align:center; font-weight:bold; opacity:0.5; font-size:12px;">${d}</div>`).join('')}
         `;
         
+        // Generování dní (1-30)
         for(let i=1; i<=30; i++) {
             let isToday = (i === date.getDate());
-            let bg = isToday ? activeBg : 'rgba(255,255,255,0.05)';
-            let col = isToday ? activeColor : 'inherit';
+            
+            // Klíč pro uložení události (např "16-12-2025")
+            // Pro jednoduchost v tomto příkladu použijeme fixní rok a měsíc z JS Date
+            let eventKey = `${i}-${date.getMonth()+1}-${date.getFullYear()}`;
+            let hasEvent = AppState.calendarEvents[eventKey] ? true : false;
+
+            let bg = isToday ? '#e84393' : 'rgba(255,255,255,0.05)';
+            let color = isToday ? 'white' : 'inherit';
             
             html += `
-                <div style="
-                    padding: 15px; 
-                    background: ${bg}; 
-                    color: ${col}; 
-                    text-align: center; 
-                    border-radius: 8px;
-                    border: 1px solid rgba(255,255,255,0.1);
-                ">${i}</div>`;
+                <div class="calendar-day" onclick="System.openCalendarModal(${i})" style="background: ${bg}; color: ${color};">
+                    ${i}
+                    ${hasEvent ? '<div class="event-dot"></div>' : ''}
+                </div>`;
         }
+
+        // Výpis události pro dnešek
+        let todayKey = `${date.getDate()}-${date.getMonth()+1}-${date.getFullYear()}`;
+        let todayEvent = AppState.calendarEvents[todayKey] || "Žádné plány";
 
         html += `
                 </div>
-                <div style="margin-top: 20px; padding: 20px; background: rgba(0,0,0,0.2); border-radius: 10px;">
-                    <h4>Dnešní události</h4>
-                    <p style="opacity: 0.6;">Žádné naplánované schůzky.</p>
+                <div style="margin-top: 20px; padding: 20px; background: rgba(255,255,255,0.05); border-radius: 12px;">
+                    <h4 style="margin:0 0 5px 0; color: #e84393;">Dnešní událost:</h4>
+                    <p style="margin:0; opacity: 0.8; font-size: 14px;">${todayEvent}</p>
                 </div>
             </div>
         </div>`;
         
         $('#app-content').html(html);
+    },
+
+    openCalendarModal: (day) => {
+        let date = new Date();
+        // Uložíme si aktuálně editovaný den do globální proměnné (nebo do atributu modalu)
+        AppState.editingDateKey = `${day}-${date.getMonth()+1}-${date.getFullYear()}`;
+        
+        let existingEvent = AppState.calendarEvents[AppState.editingDateKey] || "";
+
+        $('#modal-date-title').text(`Plán na ${day}. ${date.getMonth()+1}.`);
+        $('#event-input').val(existingEvent);
+        
+        // Zobrazit modal
+        $('#calendar-modal').css('display', 'flex').hide().fadeIn(150);
+        $('#event-input').focus();
+    },
+
+    saveCalendarEvent: () => {
+        let val = $('#event-input').val();
+        
+        if (AppState.editingDateKey) {
+            if (val.trim() === "") {
+                delete AppState.calendarEvents[AppState.editingDateKey];
+            } else {
+                AppState.calendarEvents[AppState.editingDateKey] = val;
+            }
+            
+            // Uložit do DB a překreslit
+            System.syncToCloud();
+            System.renderCalendar();
+            $('#calendar-modal').fadeOut(150);
+        }
+    },
+
+    // 3. SETTINGS
+    renderSettings: () => {
+        // ... (Zůstává stejné jako v předchozí verzi, funguje dobře) ...
+         let storageUsed = AppState.installedApps.length * 50; 
+        let storageTotal = AppState.currentConfig.storage;
+        let percent = Math.min((storageUsed / storageTotal) * 100, 100);
+        
+        $('#app-content').html(`
+        <div style="padding: 40px; color: inherit;">
+            <h1>Nastavení</h1>
+            <hr style="opacity: 0.2;">
+            <div style="margin-top:20px; background: rgba(255,255,255,0.05); padding: 20px; border-radius: 10px;">
+                <p><strong>Úložiště:</strong> ${storageUsed} / ${storageTotal} MB</p>
+                <div style="background: #333; height: 10px; border-radius: 5px; overflow:hidden;">
+                    <div style="width:${percent}%; background: #0984e3; height:100%;"></div>
+                </div>
+            </div>
+            <button onclick="System.factoryReset()" style="margin-top:40px; background:#d63031; border:none; color:white; padding:10px 20px; border-radius:5px; cursor:pointer;">Tovární nastavení</button>
+        </div>
+        `);
+    },
+    
+    factoryReset: () => {
+        AppState.installedApps = ['store', 'settings', 'calendar'];
+        AppState.calendarEvents = {};
+        System.syncToCloud();
+        System.boot(AppState.currentData);
     }
 };

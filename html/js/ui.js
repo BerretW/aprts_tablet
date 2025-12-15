@@ -25,63 +25,160 @@ const UI = {
     },
 
     // 3. Vykreslení ikon na domovské obrazovce
-    renderHomeScreen: () => {
-        $('#app-grid').empty();
+ renderHomeScreen: () => {
+        const grid = $('#app-grid');
+        grid.empty();
 
-        // Projdeme nainstalované aplikace v AppState
-        AppState.installedApps.forEach(appName => {
+        AppState.installedApps.forEach((appName, index) => {
             let app = AppState.allRegisteredApps[appName];
             
-            // Pokud aplikace existuje v definici (nebyla smazána z resourcu)
             if (app) {
-                // Barva se aplikuje inline, ale retro CSS ji ignoruje (!important)
                 let colorStyle = `background: ${app.color || '#333'}`;
                 
+                // Přidáme atributy draggable="true" a data-index
                 let html = `
-                    <div class="app-icon" data-app="${appName}">
+                    <div class="app-icon" draggable="true" data-app="${appName}" data-index="${index}">
                         <div class="icon-wrapper">
                             <i class="${app.iconClass}" style="${colorStyle}"></i>
                         </div>
                         <span>${app.label}</span>
                     </div>`;
                     
-                $('#app-grid').append(html);
+                grid.append(html);
             }
+        });
+
+        // Aktivace Drag & Drop listenerů
+        UI.enableDragAndDrop();
+    },
+
+    // NOVÁ FUNKCE PRO DRAG & DROP LOGIKU
+    enableDragAndDrop: () => {
+        let draggedItem = null;
+        const icons = document.querySelectorAll('.app-icon');
+
+        icons.forEach(icon => {
+            // Začátek tažení
+            icon.addEventListener('dragstart', function(e) {
+                draggedItem = this;
+                setTimeout(() => this.classList.add('dragging'), 0);
+            });
+
+            // Konec tažení
+            icon.addEventListener('dragend', function() {
+                this.classList.remove('dragging');
+                draggedItem = null;
+                
+                // Po dokončení přeuložíme pořadí
+                UI.saveNewIconOrder();
+            });
+
+            // Tažení nad jinou ikonou
+            icon.addEventListener('dragover', function(e) {
+                e.preventDefault(); // Nutné pro drop
+                this.classList.add('drag-over');
+            });
+
+            // Opuštění jiné ikony
+            icon.addEventListener('dragleave', function() {
+                this.classList.remove('drag-over');
+            });
+
+            // Puštění (Drop) - Prohození pozic
+            icon.addEventListener('drop', function(e) {
+                e.preventDefault();
+                this.classList.remove('drag-over');
+
+                if (this !== draggedItem) {
+                    // Prohodíme HTML elementy v DOMu
+                    let allIcons = Array.from(document.querySelectorAll('.app-icon'));
+                    let indexA = allIcons.indexOf(draggedItem);
+                    let indexB = allIcons.indexOf(this);
+
+                    const grid = document.getElementById('app-grid');
+                    
+                    // Jednoduché prohození v poli InstalledApps se stane v saveNewIconOrder,
+                    // tady jen vizuálně prohodíme DOM elementy
+                    if (indexA < indexB) {
+                        grid.insertBefore(draggedItem, this.nextSibling);
+                    } else {
+                        grid.insertBefore(draggedItem, this);
+                    }
+                }
+            });
         });
     },
 
-    // 4. Přepínání mezi plochou a oknem aplikace
-    showAppFrame: (show) => {
-        const homeScreen = $('#home-screen');
-        const appFrame = $('#app-frame');
-        const retroNav = $('.retro-nav-bar');
-        const appContent = $('#app-content');
+    saveNewIconOrder: () => {
+        // Získáme nové pořadí z DOMu
+        let newOrder = [];
+        $('.app-icon').each(function() {
+            newOrder.push($(this).data('app'));
+        });
 
-        if (show) {
-            // OTEVÍRÁME APLIKACI
-            homeScreen.removeClass('active-view').addClass('hidden-view');
-            appFrame.removeClass('hidden-view').addClass('active-view');
+        // Uložíme do AppState
+        AppState.installedApps = newOrder;
+        // Odešleme do DB
+        System.syncToCloud();
+    },
+    updateStatusBar: (time, hasWifi, wifiName) => {
+        // Aktualizace času
+        $('#clock').text(time);
 
-            // Logika pro Retro Navigaci (tlačítko Zpět nahoře)
-            if (AppState.currentConfig.os === 'retro') {
-                retroNav.css('display', 'flex'); 
-            } else {
-                retroNav.hide(); // Moderní OS lištu nepotřebuje
-            }
+        // Aktualizace ikony signálu
+        const signalIcon = $('.status-bar .fa-signal, .status-bar .fa-wifi, .status-bar .fa-ban');
+        
+        // Odebereme staré třídy
+        signalIcon.removeClass('fa-signal fa-wifi fa-ban');
 
+        if (hasWifi) {
+            // Máme Wi-Fi
+            signalIcon.addClass('fa-wifi');
+            $('#network-name').text(wifiName); // Pokud bys chtěl zobrazit název sítě
         } else {
-            // JDEME DOMŮ (Zavíráme aplikaci)
-            appFrame.removeClass('active-view').addClass('hidden-view');
-            homeScreen.removeClass('hidden-view').addClass('active-view');
-            
-            // Vždy skryjeme retro lištu
-            retroNav.hide();
-
-            // Důležité: Vyčistit HTML obsah aplikace, aby neběžel na pozadí
-            // a uvolnila se paměť prohlížeče
-            appContent.empty();
+            // Nemáme Wi-Fi -> Zobrazíme "No Signal" nebo 4G (pokud chceš data všude, nech 4G)
+            // Zde předpokládáme, že tablet má JEN Wifi. Pokud má i SIM, logika by byla složitější.
+            // Uděláme to tak, že bez Wifi = Žádný internet.
+            signalIcon.addClass('fa-ban'); // Ikonka přeškrtnutého kruhu
+            $('#network-name').text('Odpojeno');
         }
     },
+
+    // 4. Přepínání mezi plochou a oknem aplikace
+showAppFrame: (show) => {
+    const homeScreen = $('#home-screen');
+    const appFrame = $('#app-frame');
+    const retroNav = $('.retro-nav-bar');
+    const appContent = $('#app-content');
+
+    if (show) {
+        // OTEVÍRÁME APLIKACI
+        // 1. Nejprve vše skryjeme a odebereme active
+        homeScreen.removeClass('active-view').addClass('hidden-view').hide(); // .hide() je jQuery pojistka
+        
+        // 2. Zobrazíme aplikaci
+        appFrame.removeClass('hidden-view').addClass('active-view').show();
+
+        // Retro lišta
+        if (AppState.currentConfig.os === 'retro') {
+            retroNav.css('display', 'flex').removeClass('hidden-view'); 
+        } else {
+            retroNav.hide();
+        }
+
+    } else {
+        // JDEME DOMŮ
+        // 1. Skryjeme aplikaci
+        appFrame.removeClass('active-view').addClass('hidden-view').hide();
+        retroNav.hide();
+        
+        // 2. Zobrazíme plochu
+        homeScreen.removeClass('hidden-view').addClass('active-view').show();
+
+        // Vyčistit obsah
+        appContent.empty();
+    }
+},
 
     // Pomocná funkce pro notifikace uvnitř tabletu (volitelné rozšíření)
     showNotification: (title, message) => {
