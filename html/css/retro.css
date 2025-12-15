@@ -1,0 +1,74 @@
+.theme-retro {
+    font-family: 'Courier New', monospace;
+    color: #00ff00;
+}
+
+.theme-retro .tablet-frame {
+    background: #000;
+    border: 15px solid #666; /* Tlustý šedý rámeček */
+    border-style: outset;
+    border-radius: 0;
+}
+
+.theme-retro .screen {
+    background: black;
+    border: 2px inset #444;
+    margin: 20px;
+}
+
+.theme-retro .status-bar {
+    background: #005500; color: black;
+    border-bottom: 2px solid #00ff00;
+    text-transform: uppercase;
+}
+
+.theme-retro .home-button {
+    display: none; /* Staré tablety nemají swipe bar, řeší se klávesou */
+}
+
+/* Ikony */
+.theme-retro .app-icon { margin-bottom: 10px; }
+.theme-retro .app-icon i {
+    width: 60px; height: 40px;
+    border: 1px solid #00ff00;
+    background: black !important; /* Ignorujeme barvu appky */
+    color: #00ff00;
+    display: flex; justify-content: center; align-items: center;
+    font-size: 20px;
+    box-shadow: 4px 4px 0 #004400;
+}
+.theme-retro .app-icon:active i { transform: translate(2px, 2px); box-shadow: 2px 2px 0 #004400; }
+.theme-retro .app-icon span { margin-top: 5px; font-size: 12px; letter-spacing: 1px; }
+
+/* Okna aplikací */
+.theme-retro #app-content {
+    background: black; color: #00ff00;
+    padding: 10px;
+}
+.theme-retro button {
+    background: black; color: #00ff00; border: 1px solid #00ff00;
+    cursor: pointer; padding: 5px;
+}
+
+/* Retro Boot */
+.theme-retro #boot-screen { background: black; color: #00ff00; align-items: flex-start; padding: 40px; }
+.theme-retro .loader { display: none; }
+
+.retro-nav-bar {
+    display: none; /* Defaultně skryté */
+    background: #004400;
+    color: #00ff00;
+    padding: 5px 10px;
+    border-bottom: 2px solid #00ff00;
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    cursor: pointer;
+}
+.retro-nav-bar:hover {
+    background: #006600;
+}
+
+.theme-retro .retro-nav-bar {
+    display: flex; /* Zobrazit pouze v retro tématu */
+    justify-content: space-between;
+}

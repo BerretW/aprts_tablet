@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>DT Tablet System</title>
+    
+    <!-- Knihovny -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
+    <!-- Naše styly -->
+    <link rel="stylesheet" href="css/core.css">
+    <link rel="stylesheet" href="css/modern.css">
+    <link rel="stylesheet" href="css/retro.css">
+</head>
+<body>
+
+    <div id="tablet-container" style="display: none;">
+        <!-- Zde JS nastavuje class="theme-modern" nebo "theme-retro" -->
+        <div id="tablet-os-root">
+            
+            <div class="tablet-frame">
+                <!-- Boot Screen -->
+                <div id="boot-screen">
+                    <div id="boot-logo"></div>
+                </div>
+
+                <!-- System Content -->
+                <div id="os-content" style="display:none; height: 100%;">
+                    
+                    <div class="status-bar">
+                        <span><i class="fas fa-signal"></i> 4G</span>
+                        <span id="clock">12:00</span>
+                    </div>
+<div class="screen">
+    <div id="home-screen" class="active-view">
+        <div class="app-grid" id="app-grid"></div>
+    </div>
+    
+    <!-- RETRO NAVIGACE (Vloženo sem) -->
+    <div class="retro-nav-bar hidden-view" onclick="System.goHome()">
+        <span>&lt; ZPĚT NA PLOCHU</span>
+        <span>MENU</span>
+    </div>
+
+    <div id="app-frame" class="hidden-view">
+        <div id="app-content"></div>
+    </div>
+</div>
+
+                    <!-- Fyzické tlačítko (jen pro modern) -->
+                    <div class="home-button"></div>
+                </div>
+            </div>
+            
+        </div>
+    </div>
+
+    <!-- Naše skripty (v přesném pořadí) -->
+    <script src="js/state.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/system.js"></script>
+    <script src="js/main.js"></script>
+
+</body>
+</html>
