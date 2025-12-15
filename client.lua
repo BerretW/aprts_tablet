@@ -194,3 +194,56 @@ function StopTabletAnimation()
         tabletProp = nil
     end
 end
+
+-- ====================================================================
+-- 6. SYNC LOOP (ČAS + WIFI)
+-- ====================================================================
+
+-- Funkce pro kontrolu Wifi
+local function GetWifiStatus()
+    local ped = PlayerPedId()
+    local pos = GetEntityCoords(ped)
+    local connected = false
+    local wifiLabel = "Žádný signál"
+
+    for _, zone in pairs(Config.WifiZones) do
+        local dist = #(pos - zone.coords)
+        if dist < zone.radius then
+            connected = true
+            wifiLabel = zone.label
+            break -- Jsme v dosahu jedné, stačí
+        end
+    end
+
+    return connected, wifiLabel
+end
+
+-- Hlavní loop pro aktualizaci dat v UI
+CreateThread(function()
+    while true do
+        if isTabletOpen then
+            -- 1. Získání herního času
+            local hours = GetClockHours()
+            local minutes = GetClockMinutes()
+            -- Formátování na 00:00
+            if hours < 10 then hours = "0" .. hours end
+            if minutes < 10 then minutes = "0" .. minutes end
+            local timeString = hours .. ":" .. minutes
+
+            -- 2. Kontrola Wi-Fi
+            local hasWifi, wifiName = GetWifiStatus()
+
+            -- 3. Odeslání do UI
+            SendNUIMessage({
+                action = "updateInfobar",
+                time = timeString,
+                wifi = hasWifi,
+                wifiName = wifiName
+            })
+
+            Wait(2000) -- Stačí aktualizovat jednou za 2 sekundy
+        else
+            Wait(1000)
+        end
+    end
+end)

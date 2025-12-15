@@ -23,7 +23,8 @@ files {
     'html/js/system.js',
     'html/js/main.js',
     
-    'html/img/*.png'
+    'html/images/*.png',
+    'html/images/*.jpg'
 }
 shared_script 'config.lua'
 client_script 'client.lua'
