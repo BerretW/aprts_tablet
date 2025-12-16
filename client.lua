@@ -4,8 +4,11 @@ local currentSerial = nil
 local currentBattery = 100
 local lastHistoryUpdate = 0
 local batteryHistory = {} -- Tabulka pro historii
-local isConnectedToCharger = false
-local chargerCoords = nil
+
+-- Globální proměnné pro Wi-Fi (aby byly dostupné pro Exporty)
+local hasInternet = false
+local currentWifiName = "Žádný signál"
+local currentWifiLevel = 0
 
 -- Animace
 local tabletModel = "prop_cs_tablet"
@@ -59,7 +62,7 @@ end)
 -- ====================================================================
 
 RegisterNetEvent('aprts_tablet:client:loadTablet')
-AddEventHandler('aprts_tablet:client:loadTablet', function(serial, model, dbData,metaData)
+AddEventHandler('aprts_tablet:client:loadTablet', function(serial, model, dbData, metaData)
     local tabletConfig = Config.Tablets[model]
     if not tabletConfig then
         print("^1[Tablet] Neznámý model tabletu: " .. tostring(model) .. "^0")
@@ -93,6 +96,7 @@ AddEventHandler('aprts_tablet:client:loadTablet', function(serial, model, dbData
         SendNUIMessage(payload)
     end
 end)
+
 -- Callbacks
 RegisterNUICallback('setPin', function(data, cb)
     TriggerServerEvent('aprts_tablet:server:setPin', data.pin)
@@ -108,6 +112,7 @@ RegisterNUICallback('unlockSuccess', function(data, cb)
     TriggerServerEvent('aprts_tablet:server:unlockSuccess')
     cb('ok')
 end)
+
 RegisterNetEvent('aprts_tablet:client:setBattery')
 AddEventHandler('aprts_tablet:client:setBattery', function(val)
     currentBattery = val
@@ -120,7 +125,7 @@ end)
 exports('RegisterApp', function(appName, label, iconClass, color, eventToTrigger, restrictedJobs)
     RegisteredApps[appName] = {
         event = eventToTrigger,
-        jobs = restrictedJobs -- Např. {['police'] = true, ['ambulance'] = true}
+        jobs = restrictedJobs
     }
     SendNUIMessage({
         action = "registerApp",
@@ -128,7 +133,7 @@ exports('RegisterApp', function(appName, label, iconClass, color, eventToTrigger
         label = label,
         iconClass = iconClass,
         color = color,
-        isRestricted = (restrictedJobs ~= nil) -- Info pro JS (např. přidat zámek na ikonu)
+        isRestricted = (restrictedJobs ~= nil)
     })
 end)
 
@@ -149,8 +154,7 @@ RegisterNUICallback('closeTablet', function(data, cb)
     SetNuiFocus(false, false)
     StopTabletAnimation()
 
-    -- Pokud je připojen k nabíječce a zavře se, necháme animaci nabíjení (pokud chceme), 
-    -- nebo ho necháme jen stát. Zde rušíme animaci tabletu.
+    -- Pokud je připojen k nabíječce a zavře se, necháme animaci nabíjení
     if isConnectedToCharger then
         local ped = PlayerPedId()
         RequestAnimDict("cellphone@")
@@ -174,7 +178,6 @@ RegisterNUICallback('openAppRequest', function(data, cb)
         local myJob = PlayerData.job.name
 
         if appData.jobs and not appData.jobs[myJob] then
-            -- Hráč nemá správný job
             TriggerEvent('chat:addMessage', {
                 args = {'^1[Tablet]', 'Nemáš oprávnění pro tuto aplikaci!'}
             })
@@ -190,7 +193,6 @@ end)
 
 RegisterNUICallback('syncData', function(data, cb)
     if currentSerial then
-        -- Důležité: Přidáme aktuální serverovou historii do dat k uložení
         data.batteryHistory = batteryHistory
         TriggerServerEvent('aprts_tablet:server:saveTabletData', currentSerial, data)
     end
@@ -238,7 +240,7 @@ end
 
 function StopTabletAnimation()
     local ped = PlayerPedId()
-    ClearPedTasks(ped) -- Pozor, toto zruší i animaci nabíjení, pokud běží
+    ClearPedTasks(ped)
     if tabletProp then
         DeleteEntity(tabletProp)
         tabletProp = nil
@@ -249,39 +251,99 @@ end
 -- 6. NABÍJENÍ A LOGIKA
 -- ====================================================================
 
-function ConnectCharger(coords)
-    if isConnectedToCharger then
-        return
-    end
+-- Proměnné pro nabíjení
+local chargerCoords = nil
+local isConnectedToCharger = false
+local chargingSlot = nil -- Uložíme si slot, který nabíjíme
+local chargingSerial = nil -- Uložíme si serial pro kontrolu
+
+function ConnectCharger(coords, slot, currentBat, serial)
+    if isConnectedToCharger then return end
+
     local ped = PlayerPedId()
     chargerCoords = coords or GetEntityCoords(ped)
     isConnectedToCharger = true
+    
+    -- Nastavíme globální proměnnou currentBattery na hodnotu vybraného tabletu
+    if slot then
+        chargingSlot = slot
+        chargingSerial = serial
+        currentBattery = currentBat or 0
+    else
+        chargingSlot = nil 
+    end
 
     TriggerEvent('chat:addMessage', {
-        args = {'^2[Tablet]', 'Tablet připojen k nabíječce.'}
+        args = {'^2[Tablet]', 'Tablet ('..(serial or "?")..') připojen. Stav: '..math.floor(currentBattery)..'%'}
     })
 
     if not isTabletOpen then
         RequestAnimDict("cellphone@")
-        while not HasAnimDictLoaded("cellphone@") do
-            Wait(10)
-        end
+        while not HasAnimDictLoaded("cellphone@") do Wait(10) end
         TaskPlayAnim(ped, "cellphone@", "cellphone_text_in", 8.0, -8.0, -1, 50, 0, false, false, false)
     end
 end
 
 function DisconnectCharger()
-    if not isConnectedToCharger then
-        return
+    if not isConnectedToCharger then return end
+    
+    -- Uložení dat při odpojení
+    if chargingSlot and chargingSerial then
+        TriggerServerEvent('aprts_tablet:server:updateBatteryBySlot', chargingSlot, chargingSerial, math.floor(currentBattery))
     end
+
     isConnectedToCharger = false
     chargerCoords = nil
+    chargingSlot = nil
+    chargingSerial = nil
+
     TriggerEvent('chat:addMessage', {
-        args = {'^1[Tablet]', 'Tablet odpojen.'}
+        args = {'^1[Tablet]', 'Tablet odpojen. Stav: '..math.floor(currentBattery)..'%'}
     })
-    if not isTabletOpen then
-        ClearPedTasks(PlayerPedId())
+
+    if not isTabletOpen then ClearPedTasks(PlayerPedId()) end
+end
+
+-- Funkce pro otevření menu (ox_lib)
+local function OpenChargerMenu(entityCoords)
+    local items = exports.ox_inventory:Search('slots', 'tablet')
+
+    if not items or #items == 0 then
+        TriggerEvent('chat:addMessage', { args = {'^1[Tablet]', 'Nemáš u sebe žádný tablet!'} })
+        return
     end
+
+    local options = {}
+
+    for _, item in pairs(items) do
+        local meta = item.metadata or {}
+        local serial = meta.serial or "Neznámý"
+        local battery = meta.battery or 100
+        local isLocked = meta.locked and "Zamčený" or "Odemčený"
+        
+        local batColor = "green"
+        if battery < 30 then batColor = "red" elseif battery < 60 then batColor = "orange" end
+
+        table.insert(options, {
+            title = 'Tablet: ' .. serial,
+            description = string.format("Baterie: %s%% | %s", battery, isLocked),
+            icon = 'fas fa-tablet-alt',
+            iconColor = batColor,
+            progress = battery,
+            colorScheme = batColor,
+            onSelect = function()
+                -- ZDE voláme ConnectCharger s daty vybraného tabletu
+                ConnectCharger(entityCoords, item.slot, battery, serial)
+            end
+        })
+    end
+
+    lib.registerContext({
+        id = 'tablet_charge_menu',
+        title = 'Vyber tablet k nabíjení',
+        options = options
+    })
+    lib.showContext('tablet_charge_menu')
 end
 
 exports('ConnectCharger', ConnectCharger)
@@ -290,13 +352,15 @@ exports('DisconnectCharger', DisconnectCharger)
 -- HLAVNÍ SYNC LOOP
 CreateThread(function()
     while true do
-        Wait(Config.BatteryTick) -- Interval 5 sekund
+        Wait(Config.BatteryTick) -- 5 sekund
 
         local ped = PlayerPedId()
         local pos = GetEntityCoords(ped)
-        local hasInternet = false
-        local currentWifiName = "Žádný signál"
-        local currentWifiLevel = 0
+        
+        -- Reset lokálních indikátorů pro tento tick
+        hasInternet = false
+        currentWifiName = "Žádný signál"
+        currentWifiLevel = 0
 
         -- 1. Wi-Fi Logic
         for _, zone in pairs(Config.WifiZones) do
@@ -327,24 +391,26 @@ CreateThread(function()
 
         -- 3. Battery Logic
         if isConnectedToCharger then
+            -- Nabíjení
             if currentBattery < 100 then
                 currentBattery = currentBattery + Config.BatteryChargeRate
             end
+            if currentBattery > 100 then currentBattery = 100 end
+
+            -- Průběžný update na server (pro jistotu)
+            if chargingSlot and chargingSerial then
+                 TriggerServerEvent('aprts_tablet:server:updateBatteryBySlot', chargingSlot, chargingSerial, math.floor(currentBattery))
+            end
+
         elseif isTabletOpen then
+            -- Vybíjení
             if currentBattery > 0 then
                 currentBattery = currentBattery - Config.BatteryDrainRate
             end
+            if currentBattery < 0 then currentBattery = 0 end
         end
 
-        -- Limity
-        if currentBattery > 100 then
-            currentBattery = 100
-        end
-        if currentBattery < 0 then
-            currentBattery = 0
-        end
-
-        -- 4. Ukládání historie (Interval 30 minut)
+        -- 4. Ukládání historie
         local gameTimer = GetGameTimer()
         if (gameTimer - lastHistoryUpdate) > (Config.HistoryInterval * 60000) then
             lastHistoryUpdate = gameTimer
@@ -357,7 +423,6 @@ CreateThread(function()
                 value = math.floor(currentBattery)
             })
 
-            -- Limit historie (48 záznamů = 24 hodin)
             if #batteryHistory > 48 then
                 table.remove(batteryHistory, 1)
             end
@@ -378,7 +443,7 @@ CreateThread(function()
             })
         end
 
-        -- Vybití
+        -- Kritická baterie
         if currentBattery <= 0 and isTabletOpen and not isConnectedToCharger then
             SetNuiFocus(false, false)
             StopTabletAnimation()
@@ -394,7 +459,6 @@ end)
 -- 7. EXPORT PRO PLUGINY (API)
 -- ====================================================================
 
--- Tuto funkci budou volat pluginy
 local function GetTabletData()
     return {
         isOpen = isTabletOpen,
@@ -402,7 +466,7 @@ local function GetTabletData()
         wifi = {
             isConnected = hasInternet,
             name = currentWifiName,
-            level = currentWifiLevel, -- 0-4
+            level = currentWifiLevel, -- Nyní čte globální proměnné
             strengthPct = (currentWifiLevel / 4) * 100
         },
         time = {
@@ -412,7 +476,6 @@ local function GetTabletData()
     }
 end
 
--- Registrace exportu
 exports('GetTabletData', GetTabletData)
 
 RegisterCommand('fixtablet', function()
@@ -444,10 +507,11 @@ exports('SaveAppData', function(appName, key, value)
         TriggerServerEvent('aprts_tablet:server:saveAppData', currentSerial, appName, key, value)
     end
 end)
--- ====================================================================
--- 8. OX TARGET INTEGRACE (NABÍJEČKY
 
--- Registrace Targetu na modely a lokace
+-- ====================================================================
+-- 8. OX TARGET INTEGRACE (NABÍJEČKY)
+-- ====================================================================
+
 CreateThread(function()
     if GetResourceState('ox_target') == 'started' then
 
@@ -457,10 +521,11 @@ CreateThread(function()
             icon = 'fas fa-bolt',
             label = 'Připojit tablet k nabíječce',
             onSelect = function(data)
-                ConnectCharger(GetEntityCoords(data.entity))
+                 -- Změna: Voláme menu s výběrem
+                 OpenChargerMenu(GetEntityCoords(data.entity))
             end,
             canInteract = function(entity)
-                return not isConnectedToCharger and currentBattery < 100
+                return not isConnectedToCharger
             end
         }, {
             name = 'tablet_disconnect_prop',
@@ -474,7 +539,7 @@ CreateThread(function()
             end
         }})
 
-        -- 2. Možnost: Kliknutí na konkrétní lokace (ze souřadnic v Configu)
+        -- 2. Možnost: Kliknutí na konkrétní lokace (SphereZone)
         for i, coords in ipairs(Config.ChargerLocations) do
             exports.ox_target:addSphereZone({
                 coords = coords,
@@ -485,7 +550,8 @@ CreateThread(function()
                     icon = 'fas fa-bolt',
                     label = 'Zapojit nabíječku',
                     onSelect = function()
-                        ConnectCharger(coords)
+                        -- Změna: Voláme menu s výběrem i zde
+                        OpenChargerMenu(coords)
                     end,
                     canInteract = function()
                         return not isConnectedToCharger

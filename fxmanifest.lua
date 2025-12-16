@@ -8,7 +8,7 @@ description 'aprts_tablet'
 games {"gta5"}
 
 ui_page 'html/index.html'
-
+shared_script '@ox_lib/init.lua'
 files {
     'html/libs/chart.min.js',
     'html/libs/sweetalert2.all.min.js',
@@ -38,5 +38,10 @@ shared_script 'config.lua'
 client_script 'client.lua'
 server_script 'server.lua'
 exports {
-    'RegisterApp'
+    'RegisterApp',
+    'GetTabletData',
+    'SetAppBadge',
+    'SaveAppData',
+    'ConnectCharger',
+    'DisconnectCharger'
 }
