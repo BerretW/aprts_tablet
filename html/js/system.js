@@ -32,6 +32,8 @@ const System = {
       label: config.label,
       iconClass: config.icon,
       color: config.color,
+      size: config.size || 20, // Default pro interní moduly
+      supportedOS: config.supportedOS || 'all'
     };
 
     // 3. Auto-instalace systémových appek

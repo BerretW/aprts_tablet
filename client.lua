@@ -205,6 +205,7 @@ end)
 
 RegisterNUICallback('appAction', function(data, cb)
     -- Bridge pro posílání dat z JS do Lua pluginů
+    -- print("Tablet App Action:", data.appId, data.action, json.encode(data.data))
     TriggerEvent(data.appId .. ':handleAction', data.action, data.data)
     cb('ok')
 end)

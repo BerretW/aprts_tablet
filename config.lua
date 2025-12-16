@@ -1,19 +1,41 @@
 Config = {}
 
+-- config.lua
 Config.Tablets = {
+    -- 1. Starý "Basic" tablet (Retro vzhled)
     ['tablet_basic'] = {
-        label = "Starý Tablet (v1.0)",
-        os = "retro",
+        label = "Nokia Tab 3310",
+        os = "retro", -- Unikátní ID systému
         storage = 512,
         bootTime = 3000,
         wallpaper = "none"
     },
-    ['tablet_pro'] = {
-        label = "iFruit Pad Pro",
-        os = "modern",
-        storage = 10240,
-        bootTime = 1000,
+
+    -- 2. Levný moderní tablet (Starší OS)
+    ['tablet_air'] = {
+        label = "iFruit Air (2020)",
+        os = "Apparatus_1", -- Starší verze OS
+        storage = 1024, -- Málo místa
+        bootTime = 2000,
         wallpaper = "https://files.catbox.moe/w8s1z6.jpg"
+    },
+
+    -- 3. Nejnovější tablet (Nový OS + Hodně místa)
+    ['tablet_pro'] = {
+        label = "iFruit Pro X (2024)",
+        os = "Apparatus_2", -- Nová verze OS (vyžadovaná pro nové appky)
+        storage = 8192, -- Hodně místa
+        bootTime = 1000,
+        wallpaper = "https://files.catbox.moe/k9d8s1.jpg"
+    },
+    
+    -- 4. Hacker Tablet (Speciální OS)
+    ['tablet_hacker'] = {
+        label = "DarkNet Pad",
+        os = "kali_os",
+        storage = 4096,
+        bootTime = 500,
+        wallpaper = "https://files.catbox.moe/hacker_bg.jpg"
     }
 }
 

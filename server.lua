@@ -179,7 +179,7 @@ end)
 -- Příkaz pro adminy
 RegisterCommand('givetablet', function(source, args)
     local src = source
-    -- Argument 1: model (tablet_basic nebo tablet_pro), defaultně basic
+    -- Argument 1: model (tablet_basic nebo tablet_air), defaultně basic
     local modelType = args[1] or 'tablet_basic' 
     
     local serial = "TAB-" .. math.random(100000, 999999)

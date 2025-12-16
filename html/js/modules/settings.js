@@ -17,14 +17,25 @@ System.registerModule("settings", {
   // ==========================================================================
   renderModern: function () {
     const isChecked =
-      AppState.userSettings && AppState.userSettings.showWifiPct ? "checked" : "";
-    
-    let storageUsed = (AppState.installedApps.length * 150).toFixed(0);
+      AppState.userSettings && AppState.userSettings.showWifiPct
+        ? "checked"
+        : "";
+
+    let storageUsed = 0;
+    AppState.installedApps.forEach((appName) => {
+      let app = AppState.allRegisteredApps[appName];
+      if (app && app.size) {
+        storageUsed += app.size;
+      } else {
+        storageUsed += 50; // Fallback, kdyby appka neměla definovanou velikost
+      }
+    });
+    storageUsed = storageUsed.toFixed(0);
     let storageTotal = AppState.currentConfig.storage || 1024;
     let percent = Math.min((storageUsed / storageTotal) * 100, 100);
-    
+
     const isLocked = AppState.currentData.isLocked;
-    const pinDisplay = "••••"; 
+    const pinDisplay = "••••";
 
     $("#app-content").html(`
         <div style="padding: 40px; height: 100%; box-sizing: border-box; overflow-y: auto;">
@@ -48,7 +59,9 @@ System.registerModule("settings", {
                         <span style="opacity: 0.7;">${storageUsed} MB / ${storageTotal} MB</span>
                     </div>
                     <div style="background: rgba(255,255,255,0.1); height: 8px; border-radius: 4px; overflow:hidden;">
-                        <div style="width:${percent}%; background: ${percent > 80 ? "#d63031" : "#0984e3"}; height:100%; transition: width 1s;"></div>
+                        <div style="width:${percent}%; background: ${
+      percent > 80 ? "#d63031" : "#0984e3"
+    }; height:100%; transition: width 1s;"></div>
                     </div>
                 </div>
             </div>
@@ -71,7 +84,9 @@ System.registerModule("settings", {
                             <div style="font-size:11px; opacity:0.6;">Při spuštění vyžadovat kód</div>
                         </div>
                         <label class="switch">
-                            <input type="checkbox" id="toggle-lock" ${isLocked ? 'checked' : ''} onchange="System.Apps.settings.toggleLock(this)">
+                            <input type="checkbox" id="toggle-lock" ${
+                              isLocked ? "checked" : ""
+                            } onchange="System.Apps.settings.toggleLock(this)">
                             <span class="slider round"></span>
                         </label>
                     </div>
@@ -93,13 +108,15 @@ System.registerModule("settings", {
                  <div style="background: rgba(255,255,255,0.05); border-radius: 12px; overflow: hidden;">
                     <div style="padding: 15px; display:flex; justify-content:space-between;">
                         <span>Serial</span>
-                        <span style="opacity: 0.5; font-family: monospace;">${AppState.currentData.serial || "N/A"}</span>
+                        <span style="opacity: 0.5; font-family: monospace;">${
+                          AppState.currentData.serial || "N/A"
+                        }</span>
                     </div>
                  </div>
             </div>
         </div>
     `);
-    
+
     // Vykreslení grafu pro Modern
     this.renderBatteryChart();
   },
@@ -107,17 +124,18 @@ System.registerModule("settings", {
   // ==========================================================================
   // RETRO DESIGN (Terminál / DOS styl)
   // ==========================================================================
-  renderRetro: function() {
+  renderRetro: function () {
     const showWifi = AppState.userSettings && AppState.userSettings.showWifiPct;
     const isLocked = AppState.currentData.isLocked;
-    
-    let storageUsed = (AppState.installedApps.length * 150);
+
+    let storageUsed = AppState.installedApps.length * 150;
     let storageTotal = AppState.currentConfig.storage || 512;
-    
+
     // ASCII Progress bar
     let totalBars = 20;
     let filledBars = Math.round((storageUsed / storageTotal) * totalBars);
-    let barStr = "[" + "#".repeat(filledBars) + "-".repeat(totalBars - filledBars) + "]";
+    let barStr =
+      "[" + "#".repeat(filledBars) + "-".repeat(totalBars - filledBars) + "]";
 
     $("#app-content").html(`
         <div style="padding: 20px; font-family: 'Courier New', monospace; color: #00ff00; height: 100%; box-sizing: border-box; overflow-y: auto;">
@@ -132,7 +150,9 @@ System.registerModule("settings", {
                     [ NETWORKING ]
                 </div>
                 <div style="cursor: pointer;" onclick="document.getElementById('retro-wifi-check').click()">
-                    [<input type="checkbox" id="retro-wifi-check" ${showWifi ? 'checked' : ''} 
+                    [<input type="checkbox" id="retro-wifi-check" ${
+                      showWifi ? "checked" : ""
+                    } 
                       onchange="System.Apps.settings.toggleWifiPct(this)" 
                       style="accent-color: #00ff00;">] SHOW_SIGNAL_PCT
                 </div>
@@ -145,7 +165,9 @@ System.registerModule("settings", {
                 </div>
                 
                 <div style="margin-bottom: 10px; cursor: pointer;" onclick="document.getElementById('retro-lock-check').click()">
-                     [<input type="checkbox" id="retro-lock-check" ${isLocked ? 'checked' : ''} 
+                     [<input type="checkbox" id="retro-lock-check" ${
+                       isLocked ? "checked" : ""
+                     } 
                        onchange="System.Apps.settings.toggleLock(this)"
                        style="accent-color: #00ff00;">] BOOT_LOCK_ENABLED
                 </div>
@@ -172,14 +194,17 @@ System.registerModule("settings", {
             <div style="margin-top: 30px; border-top: 1px solid #004400; padding-top: 10px;">
                 HW_SERIAL: ${AppState.currentData.serial || "UNKNOWN"}<br>
                 OS_VER: 1.0.4-RETRO<br>
-                BATT_LVL: ${AppState.batteryHistory[AppState.batteryHistory.length - 1].value}%
+                BATT_LVL: ${
+                  AppState.batteryHistory[AppState.batteryHistory.length - 1]
+                    .value
+                }%
             </div>
         </div>
     `);
   },
 
   // Pomocná funkce pro graf (pouze Modern)
-  renderBatteryChart: function() {
+  renderBatteryChart: function () {
     const chartLabels = AppState.batteryHistory.map((item) => item.time);
     const chartData = AppState.batteryHistory.map((item) => item.value);
 
@@ -189,7 +214,8 @@ System.registerModule("settings", {
         type: "line",
         data: {
           labels: chartLabels,
-          datasets: [{
+          datasets: [
+            {
               label: "Baterie (%)",
               data: chartData,
               borderColor: "#00b894",
@@ -199,15 +225,28 @@ System.registerModule("settings", {
               fill: true,
               pointRadius: 2,
               pointHoverRadius: 5,
-            }],
+            },
+          ],
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
           plugins: { legend: { display: false } },
           scales: {
-            x: { display: true, ticks: { color: "rgba(255,255,255,0.3)", font: { size: 10 }, maxTicksLimit: 6 }, grid: { display: false } },
-            y: { beginAtZero: true, max: 100, grid: { color: "rgba(255,255,255,0.05)" } },
+            x: {
+              display: true,
+              ticks: {
+                color: "rgba(255,255,255,0.3)",
+                font: { size: 10 },
+                maxTicksLimit: 6,
+              },
+              grid: { display: false },
+            },
+            y: {
+              beginAtZero: true,
+              max: 100,
+              grid: { color: "rgba(255,255,255,0.05)" },
+            },
           },
           animation: false,
         },
@@ -220,18 +259,21 @@ System.registerModule("settings", {
     const newState = el.checked;
     AppState.currentData.isLocked = newState;
 
-    $.post("https://aprts_tablet/setLockState", JSON.stringify({ locked: newState }));
+    $.post(
+      "https://aprts_tablet/setLockState",
+      JSON.stringify({ locked: newState })
+    );
 
     // Retro notifikace vs Modern notifikace
     if (AppState.currentConfig.os === "retro") {
-        System.playSound('click'); // Jen kliknutí
+      System.playSound("click"); // Jen kliknutí
     } else {
-        System.API.showNotification({
-            title: "Zabezpečení",
-            text: newState ? "Tablet uzamčen." : "Tablet odemčen.",
-            icon: newState ? "success" : "warning",
-            toast: true,
-        });
+      System.API.showNotification({
+        title: "Zabezpečení",
+        text: newState ? "Tablet uzamčen." : "Tablet odemčen.",
+        icon: newState ? "success" : "warning",
+        toast: true,
+      });
     }
   },
 
@@ -253,7 +295,7 @@ System.registerModule("settings", {
       confirmButtonColor: isRetro ? "#000" : "#3085d6",
       cancelButtonColor: isRetro ? "#000" : "#d33",
       customClass: {
-          popup: isRetro ? 'retro-swal' : '' // Pokud bys chtěl extra CSS
+        popup: isRetro ? "retro-swal" : "", // Pokud bys chtěl extra CSS
       },
       inputValidator: (value) => {
         if (!/^\d{4}$/.test(value)) return "Musíte zadat 4 číslice!";
@@ -265,23 +307,23 @@ System.registerModule("settings", {
 
         $.post("https://aprts_tablet/setPin", JSON.stringify({ pin: newPin }));
 
-        if(isRetro) {
-             System.playSound('notify'); 
-             // U Retro jen refreshneme view, aby se to propsalo
-             this.renderRetro();
+        if (isRetro) {
+          System.playSound("notify");
+          // U Retro jen refreshneme view, aby se to propsalo
+          this.renderRetro();
         } else {
-            System.API.showNotification({
-                title: "PIN změněn",
-                text: `Nový kód: ${newPin}`,
-                icon: "success",
-                toast: true,
-            });
-            this.renderModern();
+          System.API.showNotification({
+            title: "PIN změněn",
+            text: `Nový kód: ${newPin}`,
+            icon: "success",
+            toast: true,
+          });
+          this.renderModern();
         }
       }
     });
   },
-  
+
   toggleWifiPct: function (checkbox) {
     if (!AppState.userSettings) AppState.userSettings = {};
     AppState.userSettings.showWifiPct = checkbox.checked;

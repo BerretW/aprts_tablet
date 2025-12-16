@@ -21,6 +21,7 @@ files {
     'html/css/core.css',
     'html/css/modern.css',
     'html/css/retro.css',
+    'html/css/kali.css',
     
     -- Scripty (pozor na pořadí)
     'html/js/state.js',
@@ -35,7 +36,14 @@ files {
     'html/images/*.jpg'
 }
 shared_script 'config.lua'
-client_script 'client.lua'
+client_scripts {
+    'client/globals.lua',   -- 1. Proměnné
+    'client/animation.lua', -- 2. Funkce animací
+    'client/battery.lua',   -- 3. Logika nabíjení
+    'client/apps.lua',      -- 4. Registrace aplikací
+    'client/nui.lua',       -- 5. NUI Callbacky
+    'client/main.lua'       -- 6. Hlavní smyčka a eventy
+}
 server_script 'server.lua'
 exports {
     'RegisterApp',
@@ -43,5 +51,7 @@ exports {
     'SetAppBadge',
     'SaveAppData',
     'ConnectCharger',
-    'DisconnectCharger'
+    'DisconnectCharger',
+    'useTablet',
+    'SendNui'
 }
