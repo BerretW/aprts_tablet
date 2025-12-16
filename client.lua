@@ -91,14 +91,18 @@ end)
 -- 3. EXPORTY A REGISTRACE APLIKACÍ
 -- ====================================================================
 
-exports('RegisterApp', function(appName, label, iconClass, color, eventToTrigger)
-    RegisteredApps[appName] = { event = eventToTrigger }
+exports('RegisterApp', function(appName, label, iconClass, color, eventToTrigger,restrictedJobs)
+    RegisteredApps[appName] = {
+        event = eventToTrigger,
+        jobs = restrictedJobs -- Např. {['police'] = true, ['ambulance'] = true}
+    }
     SendNUIMessage({
         action = "registerApp",
         appName = appName,
         label = label,
         iconClass = iconClass,
-        color = color
+        color = color,
+        isRestricted = (restrictedJobs ~= nil) -- Info pro JS (např. přidat zámek na ikonu)
     })
 end)
 
@@ -136,8 +140,20 @@ end)
 
 RegisterNUICallback('openAppRequest', function(data, cb)
     local appData = RegisteredApps[data.appId]
-    if appData and appData.event then
-        TriggerEvent(appData.event)
+    if appData then
+        -- KONTROLA JOBU (QBCore příklad)
+        local PlayerData = QBCore.Functions.GetPlayerData()
+        local myJob = PlayerData.job.name
+        
+        if appData.jobs and not appData.jobs[myJob] then
+            -- Hráč nemá správný job
+            TriggerEvent('chat:addMessage', { args = {'^1[Tablet]', 'Nemáš oprávnění pro tuto aplikaci!'} })
+            return cb('error')
+        end
+
+        if appData.event then
+            TriggerEvent(appData.event)
+        end
     end
     cb('ok')
 end)
@@ -352,6 +368,20 @@ end)
 RegisterNetEvent('aprts_tablet:sendNui')
 AddEventHandler('aprts_tablet:sendNui', function(data)
     SendNUIMessage(data)
+end)
+
+exports('SetAppBadge', function(appName, count)
+    SendNUIMessage({
+        action = "setAppBadge",
+        appName = appName,
+        count = count
+    })
+end)
+
+exports('SaveAppData', function(appName, key, value)
+    if currentSerial then
+        TriggerServerEvent('aprts_tablet:server:saveAppData', currentSerial, appName, key, value)
+    end
 end)
 -- ====================================================================
 -- 8. OX TARGET INTEGRACE (NABÍJEČKY

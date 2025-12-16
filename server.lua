@@ -107,3 +107,23 @@ RegisterCommand('givetablet', function(source, args)
         description = "Sériové číslo: " .. serial
     })
 end, true)
+
+RegisterNetEvent('aprts_tablet:server:saveAppData', function(serial, appName, key, value)
+    -- 1. Načíst data z DB
+    local result = exports.oxmysql:singleSync('SELECT tablet_data FROM player_tablets WHERE serial = ?', {serial})
+    if result and result.tablet_data then
+        local data = json.decode(result.tablet_data)
+        
+        -- 2. Vytvořit strukturu, pokud neexistuje
+        if not data.appData then data.appData = {} end
+        if not data.appData[appName] then data.appData[appName] = {} end
+        
+        -- 3. Uložit hodnotu
+        data.appData[appName][key] = value
+        
+        -- 4. Update DB
+        exports.oxmysql:update('UPDATE player_tablets SET tablet_data = ? WHERE serial = ?', {
+            json.encode(data), serial
+        })
+    end
+end)

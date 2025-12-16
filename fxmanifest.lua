@@ -29,6 +29,8 @@ files {
     'html/js/modules/*.js',       -- Načteme všechny moduly
     'html/js/main.js',
 
+    -- Zvuky
+    'html/sounds/*.mp3',
     'html/images/*.png',
     'html/images/*.jpg'
 }

@@ -20,10 +20,10 @@ $(document).ready(function () {
           data.isCharging // <--- NOVÉ
         );
         AppState.hasInternet = data.wifi;
-                AppState.batteryHistory.push(data.battery);
+        AppState.batteryHistory.push(data.battery);
         // Pokud je v historii více než 10 záznamů, smažeme ten nejstarší (posuvný graf)
         if (AppState.batteryHistory.length > 10) {
-            AppState.batteryHistory.shift();
+          AppState.batteryHistory.shift();
         }
         break;
 
@@ -55,6 +55,22 @@ $(document).ready(function () {
           console.error(`[Tablet API] Neznámá metoda: ${data.method}`);
         }
         break;
+      case "setAppBadge":
+        // Najde ikonu a přidá/upraví badge
+        let $icon = $(`.app-icon[data-app="${data.appName}"]`);
+        let $badge = $icon.find(".notification-badge");
+
+        if (data.count > 0) {
+          if ($badge.length === 0) {
+            $icon.append(`<div class="notification-badge">${data.count}</div>`);
+          } else {
+            $badge.text(data.count);
+          }
+          $icon.addClass("animate__animated animate__pulse"); // Efekt
+        } else {
+          $badge.remove();
+        }
+        break;
     }
   });
 
@@ -70,7 +86,9 @@ $(document).ready(function () {
   $(".home-button").click(function () {
     UI.showAppFrame(false);
   });
-
+  $(document).on("click", "button, .app-icon, .nav-item", function () {
+    System.playSound("click");
+  });
   // Zavření přes ESC
   document.onkeyup = function (data) {
     if (data.which == 27) {

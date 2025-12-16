@@ -133,7 +133,14 @@ const System = {
       })
     );
   },
-
+playSound: (type) => {
+    let audio = document.getElementById('sound-' + type);
+    if (audio) {
+        audio.currentTime = 0;
+        audio.volume = 0.3;
+        audio.play();
+    }
+},
   // === API PRO PLUGINY A MODULY ===
   API: {
     renderChart: (payload) => {
