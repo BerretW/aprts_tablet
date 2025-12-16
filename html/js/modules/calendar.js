@@ -100,15 +100,18 @@ System.registerModule('calendar', {
         // Změna: renderEventList voláme z tohoto objektu (this)
         this.renderEventList(events);
         
-        // Oprava tlačítka pro přidání v HTML (index.html)
-        // V index.html je stále "System.addCalendarEvent()".
-        // Protože modal je v index.html staticky, musíme ho dynamicky upravit nebo přepsat onclick.
-        // NEJLEPŠÍ ŘEŠENÍ: Přepíšeme onclick atribut tlačítka při otevření modalu:
-        $(".new-event-form button").attr("onclick", "System.Apps.calendar.addEvent()");
+    $(".new-event-form button").off("click").on("click", function() {
+        System.Apps.calendar.addEvent();
+    });
         
-        // Stejně tak input pro enter
-        $("#event-title").attr("onkeydown", "if(event.key === 'Enter'){ System.Apps.calendar.addEvent(); event.preventDefault(); }");
-
+            // Fix pro Enter klávesu
+    $("#event-title").off("keydown").on("keydown", function(e) {
+        if(e.key === 'Enter'){ 
+            System.Apps.calendar.addEvent(); 
+            e.preventDefault(); 
+        }
+    });
+this.renderEventList(events);
         $("#calendar-modal").css("display", "flex").hide().fadeIn(200);
     },
 

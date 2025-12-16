@@ -1,7 +1,11 @@
+-- ====================================================================
+-- FILE: server.lua
+-- ====================================================================
 local QBCore = exports['qb-core']:GetCoreObject()
 
 -- Pomocná funkce pro načtení tabletu z DB a odeslání klientovi
 local function LoadAndOpenTablet(source, serial, model)
+    -- 1. Zkusíme najít tablet
     local result = exports.oxmysql:singleSync('SELECT * FROM player_tablets WHERE serial = ?', {serial})
     
     local tabletData = {}
@@ -9,73 +13,97 @@ local function LoadAndOpenTablet(source, serial, model)
 
     if result then
         tabletData = json.decode(result.tablet_data) or {}
-        tabletModel = result.model
+        -- Pokud je v DB jiný model než v itemu, můžeme to ignorovat nebo aktualizovat
     else
-        print('^3[Tablet] Varování: Tablet '..serial..' nebyl nalezen v DB.^0')
-        tabletData = { installedApps = {'store', 'settings', 'calendar'}, background = 'none', calendarEvents = {} }
+        -- 2. Pokud neexistuje, VYTVOŘÍME HO HNED TEĎ
+        print('^3[Tablet] Vytvářím nový záznam v DB pro serial: '..serial..'^0')
+        tabletData = { 
+            installedApps = {'store', 'settings', 'calendar'}, 
+            background = (tabletModel == 'tablet_pro') and 'https://files.catbox.moe/w8s1z6.jpg' or 'none',
+            calendarEvents = {} 
+        }
+        
+        exports.oxmysql:insert('INSERT INTO player_tablets (serial, model, tablet_data) VALUES (?, ?, ?)', {
+            serial, tabletModel, json.encode(tabletData)
+        })
     end
 
-    -- !!! ZMĚNA ZDE: Přidali jsme 'serial' jako druhý argument !!!
     TriggerClientEvent('aprts_tablet:client:loadTablet', source, serial, tabletModel, tabletData)
 end
 
--- ====================================================================
 -- EVENTY
--- ====================================================================
 
--- NOVÝ EVENT: Otevření podle slotu (řeší tvůj problém)
 RegisterNetEvent('aprts_tablet:server:openBySlot', function(slot)
     local src = source
-    -- Získáme item přímo ze server-side inventáře (tady metadata 100% jsou)
     local item = exports.ox_inventory:GetSlot(src, slot)
 
     if item and item.name == 'tablet' and item.metadata and item.metadata.serial then
-        -- Máme sériové číslo! Můžeme načítat.
+        -- Pokud má item uložený stav baterie v metadatech, pošleme ho klientovi
+        -- (To vyžaduje malou úpravu v klientovi, viz níže)
+        local battery = item.metadata.battery or 100
+        TriggerClientEvent('aprts_tablet:client:setBattery', src, battery)
+
         LoadAndOpenTablet(src, item.metadata.serial, item.metadata.model)
     else
-        print('^1[Tablet] Chyba: Na slotu '..tostring(slot)..' není platný tablet nebo chybí serial.^0')
+        -- Pokud item nemá serial, vygenerujeme ho a uložíme do metadat (fix pro "čisté" itemy)
+        if item and item.name == 'tablet' and (not item.metadata or not item.metadata.serial) then
+            local newSerial = "TAB-" .. math.random(100000, 999999)
+            local newModel = 'tablet_basic' -- Default
+            
+            -- Update metadat v inventáři
+            local newMetadata = item.metadata or {}
+            newMetadata.serial = newSerial
+            newMetadata.model = newModel
+            newMetadata.battery = 100
+            newMetadata.description = "Sériové číslo: " .. newSerial
+
+            exports.ox_inventory:SetMetadata(src, slot, newMetadata)
+            
+            -- Otevřeme s novým serialem
+            LoadAndOpenTablet(src, newSerial, newModel)
+        else
+            print('^1[Tablet] Chyba: Neplatná data slotu.^0')
+        end
     end
 end)
 
--- Starý event pro debug nebo jiné použití (zachována kompatibilita)
-RegisterNetEvent('aprts_tablet:server:getTabletData', function(serial)
-    local src = source
-    LoadAndOpenTablet(src, serial, 'tablet_pro')
-end)
-
--- Uložení dat
+-- Uložení dat aplikací (Sync)
 RegisterNetEvent('aprts_tablet:server:saveTabletData', function(serial, newData)
-    print('^2[Tablet] Ukládání dat pro tablet: '..serial..'^0')
-    print(json.encode(newData))
     exports.oxmysql:update('UPDATE player_tablets SET tablet_data = ? WHERE serial = ?', {
         json.encode(newData), serial
     })
 end)
 
--- ====================================================================
--- PŘÍKAZY
--- ====================================================================
+-- NOVÉ: Uložení baterie při zavření
+RegisterNetEvent('aprts_tablet:server:updateBattery', function(serial, batteryLevel)
+    local src = source
+    -- Musíme najít item v inventáři podle serialu a aktualizovat metadata
+    -- OX Inventory nemá přímý "GetItemByMetadata", takže musíme iterovat nebo si poslat slot
+    -- Pro jednoduchost zde aktualizujeme DB, pokud bychom chtěli perzistenci i přes zahození itemu,
+    -- ale správně pro OX Inventory je update metadat:
+    
+    local items = exports.ox_inventory:GetInventoryItems(src)
+    for slot, item in pairs(items) do
+        if item.name == 'tablet' and item.metadata and item.metadata.serial == serial then
+            local meta = item.metadata
+            meta.battery = batteryLevel
+            exports.ox_inventory:SetMetadata(src, slot, meta)
+            break
+        end
+    end
+end)
 
+-- Příkaz pro adminy
 RegisterCommand('givetablet', function(source, args)
     local model = args[1] or 'tablet_pro'
     local serial = "TAB-" .. math.random(100000, 999999)
-
-    local defaultData = {
-        background = (model == 'tablet_pro') and 'https://files.catbox.moe/w8s1z6.jpg' or 'none',
-        installedApps = {'store', 'settings', 'calendar'},
-        settings = {}
-    }
-
-    exports.oxmysql:insert('INSERT INTO player_tablets (serial, model, tablet_data) VALUES (?, ?, ?)', {
-        serial, model, json.encode(defaultData)
-    }, function(id)
-        if id then
-            exports.ox_inventory:AddItem(source, 'tablet', 1, {
-                serial = serial,
-                model = model,
-                description = "Sériové číslo: " .. serial
-            })
-            print('Tablet vytvořen: ' .. serial)
-        end
-    end)
+    -- V DB záznam vytvoříme až při prvním otevření (viz LoadAndOpenTablet logiku),
+    -- nebo ho můžeme vytvořit zde. Díky mé úpravě LoadAndOpenTablet to není nutné zde hrotit.
+    
+    exports.ox_inventory:AddItem(source, 'tablet', 1, {
+        serial = serial,
+        model = model,
+        battery = 100,
+        description = "Sériové číslo: " .. serial
+    })
 end, true)

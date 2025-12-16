@@ -146,32 +146,68 @@ const UI = {
     // 3. STATUS BAR (HORNÍ LIŠTA)
     // -------------------------------------------------------------------------
 
-updateStatusBar: (time, hasWifi, wifiName, wifiLevel, battery) => {
+// html/js/ui.js - Najdi funkci updateStatusBar a nahraď ji:
+
+updateStatusBar: (time, hasWifi, wifiName, wifiLevel, battery, isCharging) => {
     // 1. Čas
     $('#clock').text(time);
 
     // 2. Wi-Fi
-    const signalIcon = $('.status-bar .fa-signal, .status-bar .fa-wifi, .status-bar .fa-ban');
-    signalIcon.removeClass('fa-signal fa-wifi fa-ban');
+    const netNameEl = $('#network-name');
+    const wifiIcon = $('.status-bar .fa-signal, .status-bar .fa-wifi, .status-bar .fa-ban');
+    
+    // Reset ikon
+    wifiIcon.removeClass('fa-signal fa-wifi fa-ban text-danger text-warning text-success');
 
     if (hasWifi) {
-        signalIcon.addClass('fa-wifi');
-        $('#network-name').html(`${wifiName} <span style="font-size:10px; opacity:0.7;">(${wifiLevel}/4)</span>`); 
+        wifiIcon.addClass('fa-wifi');
+        
+        // Barva podle síly signálu (volitelné)
+        if(wifiLevel <= 1) wifiIcon.addClass('text-danger'); // Červená
+        else if(wifiLevel <= 2) wifiIcon.addClass('text-warning'); // Žlutá
+        else wifiIcon.addClass('text-success'); // Zelená
+
+        // Logika pro text (Název sítě + Volitelná procenta)
+        let wifiText = wifiName;
+        if (AppState.userSettings.showWifiPct) {
+            // Přepočet 0-4 na procenta (přibližně)
+            let pct = wifiLevel * 25; 
+            wifiText += ` <span style="font-size:11px; opacity:0.8;">(${pct}%)</span>`;
+        }
+        
+        netNameEl.html(wifiText);
     } else {
-        signalIcon.addClass('fa-ban'); 
-        $('#network-name').text('Odpojeno');
+        wifiIcon.addClass('fa-ban'); 
+        netNameEl.text('Žádný signál');
     }
 
-    // 3. Baterie (Pokud ji chceš zobrazit v liště)
-    // Přidej do HTML: <span id="battery-status"></span> vedle hodin
-    let batIcon = 'fa-battery-full';
-    if(battery < 20) batIcon = 'fa-battery-empty';
-    else if(battery < 50) batIcon = 'fa-battery-quarter';
-    else if(battery < 75) batIcon = 'fa-battery-half';
+    // 3. Baterie
+    // Pokud element neexistuje, vytvoříme ho (vlož to do index.html vedle hodin, nebo to JS udělá samo)
+    let batContainer = $('#battery-container');
+    if(batContainer.length === 0) {
+        $('.status-bar').append('<div id="battery-container" style="display:flex; align-items:center; gap:5px;"></div>');
+        batContainer = $('#battery-container');
+    }
 
-    // Pokud nemáš element v HTML, můžeš ho dynamicky přidat nebo jen logovat
-    // $('#battery-icon').attr('class', 'fas ' + batIcon);
-    // $('#battery-percent').text(battery + '%');
+    // Ikona baterie
+    let batIconClass = 'fa-battery-full';
+    let batColor = '#fff';
+
+    if(isCharging) {
+        batIconClass = 'fa-bolt'; // Blesk při nabíjení
+        batColor = '#00b894'; // Zelená
+    } else {
+        if(battery < 10) { batIconClass = 'fa-battery-empty'; batColor = '#d63031'; }
+        else if(battery < 30) { batIconClass = 'fa-battery-quarter'; batColor = '#fab1a0'; }
+        else if(battery < 60) { batIconClass = 'fa-battery-half'; }
+        else if(battery < 90) { batIconClass = 'fa-battery-three-quarters'; }
+    }
+
+    // Vykreslení
+    batContainer.html(`
+        <span style="font-size:12px; font-weight:600;">${battery}%</span>
+        <i class="fas ${batIconClass}" style="color: ${batColor}; ${isCharging ? 'animation: pulse 1.5s infinite;' : ''}"></i>
+    `);
 },
 
     // -------------------------------------------------------------------------

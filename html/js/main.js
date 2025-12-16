@@ -11,8 +11,20 @@ $(document).ready(function () {
 
       // NOVÉ: Aktualizace času a Wi-Fi
       case "updateInfobar":
-        UI.updateStatusBar(data.time, data.wifi, data.wifiName);
+        UI.updateStatusBar(
+          data.time,
+          data.wifi,
+          data.wifiName,
+          data.wifiLevel,
+          data.battery,
+          data.isCharging // <--- NOVÉ
+        );
         AppState.hasInternet = data.wifi;
+                AppState.batteryHistory.push(data.battery);
+        // Pokud je v historii více než 10 záznamů, smažeme ten nejstarší (posuvný graf)
+        if (AppState.batteryHistory.length > 10) {
+            AppState.batteryHistory.shift();
+        }
         break;
 
       case "close":
