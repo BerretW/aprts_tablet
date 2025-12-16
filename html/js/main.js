@@ -1,80 +1,94 @@
-    // NUI Listeners (Lua -> JS)
-$(document).ready(function() {
-    
-    window.addEventListener('message', function(event) {
-        let data = event.data;
+// NUI Listeners (Lua -> JS)
+$(document).ready(function () {
+  window.addEventListener("message", function (event) {
+    let data = event.data;
 
-        switch(data.action) {
-            case 'bootSystem':
-                AppState.isOpen = true;
-                System.boot(data);
-                break;
-            
-            // NOVÉ: Aktualizace času a Wi-Fi
-            case 'updateInfobar':
-                UI.updateStatusBar(data.time, data.wifi, data.wifiName);
-                AppState.hasInternet = data.wifi; 
-                break;
+    switch (data.action) {
+      case "bootSystem":
+        AppState.isOpen = true;
+        System.boot(data);
+        break;
 
-            case 'close':
-                AppState.isOpen = false;
-                UI.toggleTablet(false);
-                $.post('https://aprts_tablet/closeTablet', JSON.stringify({}));
-                break;
+      // NOVÉ: Aktualizace času a Wi-Fi
+      case "updateInfobar":
+        UI.updateStatusBar(data.time, data.wifi, data.wifiName);
+        AppState.hasInternet = data.wifi;
+        break;
 
-            case 'registerApp':
-                AppState.allRegisteredApps[data.appName] = data;
-                // Systémové appky auto-install
-                if (['settings', 'store', 'calendar'].includes(data.appName)) {
-                    if (!AppState.installedApps.includes(data.appName)) {
-                        AppState.installedApps.push(data.appName);
-                    }
-                }
-                break;
+      case "close":
+        AppState.isOpen = false;
+        UI.toggleTablet(false);
+        $.post("https://aprts_tablet/closeTablet", JSON.stringify({}));
+        break;
 
-            case 'setAppContent':
-                $('#app-content').html(data.html);
-                break;
+      case "registerApp":
+        AppState.allRegisteredApps[data.appName] = data;
+        // Systémové appky auto-install
+        if (["settings", "store", "calendar"].includes(data.appName)) {
+          if (!AppState.installedApps.includes(data.appName)) {
+            AppState.installedApps.push(data.appName);
+          }
         }
-    });
+        break;
 
-    // === DOM Events ===
-    
-    // Kliknutí na ikonu (delegovaný event pro dynamické prvky)
-    $(document).on('click', '.app-icon', function() {
-        let appName = $(this).data('app');
-        System.openApp(appName);
-    });
+      case "setAppContent":
+        $("#app-content").html(data.html);
+        break;
+      case "plugin_api":
+        // data vypadá takto: { action: 'plugin_api', method: 'renderChart', payload: {...} }
 
-    // Tlačítko Home
-    $('.home-button').click(function() {
-        UI.showAppFrame(false);
-    });
-
-    // Zavření přes ESC
-    document.onkeyup = function (data) {
-        if (data.which == 27) { // ESC
-            AppState.isOpen = false;
-            UI.toggleTablet(false);
-            $.post('https://aprts_tablet/closeTablet', JSON.stringify({}));
+        if (System.API && System.API[data.method]) {
+          System.API[data.method](data.payload);
+        } else {
+          console.error(`[Tablet API] Neznámá metoda: ${data.method}`);
         }
-    };
+        break;
+    }
+  });
 
-    // Odesílání formulářů z aplikací (Bridge)
-    $(document).on('submit', '.app-form', function(e) {
-        e.preventDefault();
-        if (!AppState.activeApp) return;
+  // === DOM Events ===
 
-        let action = $(this).data('action');
-        let formData = {};
-        $(this).find('input, textarea, select').each(function() {
-            formData[this.name] = $(this).val();
-        });
+  // Kliknutí na ikonu (delegovaný event pro dynamické prvky)
+  $(document).on("click", ".app-icon", function () {
+    let appName = $(this).data("app");
+    System.openApp(appName);
+  });
 
-        $.post('https://aprts_tablet/appAction', JSON.stringify({
-            appId: AppState.activeApp,
-            action: action,
-            data: formData
-        }));
-    });
+  // Tlačítko Home
+  $(".home-button").click(function () {
+    UI.showAppFrame(false);
+  });
+
+  // Zavření přes ESC
+  document.onkeyup = function (data) {
+    if (data.which == 27) {
+      // ESC
+      AppState.isOpen = false;
+      UI.toggleTablet(false);
+      $.post("https://aprts_tablet/closeTablet", JSON.stringify({}));
+    }
+  };
+
+  // Odesílání formulářů z aplikací (Bridge)
+  $(document).on("submit", ".app-form", function (e) {
+    e.preventDefault();
+    if (!AppState.activeApp) return;
+
+    let action = $(this).data("action");
+    let formData = {};
+    $(this)
+      .find("input, textarea, select")
+      .each(function () {
+        formData[this.name] = $(this).val();
+      });
+
+    $.post(
+      "https://aprts_tablet/appAction",
+      JSON.stringify({
+        appId: AppState.activeApp,
+        action: action,
+        data: formData,
+      })
+    );
+  });
 });
