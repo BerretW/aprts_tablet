@@ -59,32 +59,31 @@ System.registerModule("settings", {
                     <h3 style="opacity:0.7; font-size:12px; text-transform:uppercase;">Zabezpečení</h3>
                     <div style="background: rgba(255,255,255,0.05); border-radius: 12px; overflow: hidden;">
                         
-                        <!-- PŘEPÍNAČ ZÁMKU -->
+                        <!-- PŘEPÍNAČ ZÁMKU (Ponecháme, určuje zda se tablet zamyká po restartu) -->
                         <div style="padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between; align-items:center;">
                             <div>
-                                <div style="font-weight:bold;">Zámek obrazovky</div>
-                                <div style="font-size:11px; opacity:0.6;">Při zapnutí bude vyžadován PIN</div>
+                                <div style="font-weight:bold;">Vyžadovat PIN</div>
+                                <div style="font-size:11px; opacity:0.6;">Při spuštění vyžadovat kód</div>
                             </div>
                             <label class="switch">
-                                <input type="checkbox" id="toggle-lock" ${
-                                  isLocked ? "checked" : ""
-                                } onchange="System.Apps.settings.toggleLock(this)">
+                                <input type="checkbox" id="toggle-lock" ${isLocked ? 'checked' : ''} onchange="System.Apps.settings.toggleLock(this)">
                                 <span class="slider round"></span>
                             </label>
                         </div>
 
-                        <!-- ZMĚNA PINU -->
+                        <!-- ZMĚNA PINU (Skrytá hodnota) -->
                         <div style="padding: 15px; display:flex; justify-content:space-between; align-items:center;">
                             <div>
                                 <div style="font-weight:bold;">Změnit PIN kód</div>
-                                <div style="font-size:11px; opacity:0.6;">Aktuální: ${currentPin}</div>
+                                <div style="font-size:11px; opacity:0.6;">Aktuální: <span style="font-family: monospace; letter-spacing: 2px;">${pinDisplay}</span></div>
                             </div>
-                            <button onclick="System.Apps.settings.changePin()" style="background: rgba(255,255,255,0.1); border:none; color:white; padding:5px 10px; border-radius:5px; cursor:pointer;">
+                            <button onclick="System.Apps.settings.changePin()" style="background: rgba(255,255,255,0.1); border:none; color:white; padding:8px 15px; border-radius:6px; cursor:pointer; font-weight:bold;">
                                 Upravit
                             </button>
                         </div>
 
                     </div>
+                </div>
                 <!-- O SYSTÉMU -->
                 <div style="margin-top: 30px; margin-bottom: 40px;">
                     <h3 style="opacity: 0.7; font-size: 14px; text-transform: uppercase; margin-bottom: 10px;">O systému</h3>
