@@ -45,6 +45,7 @@ const System = {
             });
             UI.renderHomeScreen();
         }, AppState.currentConfig.bootTime);
+        
     },
 
     // === CORE ===
@@ -82,7 +83,13 @@ const System = {
                 break;
         }
     },
-
+    pluginAction: (appId, actionName, data = {}) => {
+        $.post('https://aprts_tablet/appAction', JSON.stringify({
+            appId: appId,
+            action: actionName,
+            data: data
+        }));
+    },
     // Funkce pro přepínání měsíců
     changeMonth: (direction) => {
         // direction je -1 (zpět) nebo 1 (vpřed)
@@ -376,20 +383,49 @@ const System = {
         System.syncToCloud();
         System.renderCalendar();
     },
-    deleteEvent: (index) => {
-        let key = AppState.editingDateKey;
-        let events = AppState.calendarEvents[key];
-        
-        if (Array.isArray(events)) {
-            events.splice(index, 1);
-            if (events.length === 0) delete AppState.calendarEvents[key];
-            else AppState.calendarEvents[key] = events;
+deleteEvent: (index) => {
+    // Použití SweetAlert2 místo přímého smazání
+    Swal.fire({
+        title: 'Smazat událost?',
+        text: "Tuto akci nelze vrátit!",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d63031', // Červená
+        cancelButtonColor: '#333',
+        confirmButtonText: 'Ano, smazat',
+        cancelButtonText: 'Zrušit',
+        background: '#1e1e1e', // Tmavé pozadí pro modern theme
+        color: '#fff'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // Původní logika mazání
+            let key = AppState.editingDateKey;
+            let events = AppState.calendarEvents[key];
             
-            System.renderEventList(events || []);
-            System.syncToCloud();
-            System.renderCalendar();
+            if (Array.isArray(events)) {
+                events.splice(index, 1);
+                if (events.length === 0) delete AppState.calendarEvents[key];
+                else AppState.calendarEvents[key] = events;
+                
+                System.renderEventList(events || []);
+                System.syncToCloud();
+                System.renderCalendar();
+                
+                // Malý toast o úspěchu
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Smazáno',
+                    toast: true,
+                    position: 'top-end',
+                    showConfirmButton: false,
+                    timer: 1500,
+                    background: '#1e1e1e',
+                    color: '#fff'
+                });
+            }
         }
-    },
+    });
+},
 
 
     saveCalendarEvent: () => {

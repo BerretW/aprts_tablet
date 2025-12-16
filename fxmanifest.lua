@@ -2,7 +2,7 @@ fx_version "cerulean"
 lua54 'yes'
 
 author 'SpoiledMouse'
-version '1.0.1'
+version '1.0.2'
 description 'aprts_tablet'
 
 games {"gta5"}
@@ -10,6 +10,11 @@ games {"gta5"}
 ui_page 'html/index.html'
 
 files {
+    'html/libs/chart.min.js',
+    'html/libs/sweetalert2.all.min.js',
+    'html/libs/animate.min.css',
+    'html/libs/all.min.css',
+    
     'html/index.html',
     
     -- Styly
@@ -22,7 +27,7 @@ files {
     'html/js/ui.js',
     'html/js/system.js',
     'html/js/main.js',
-    
+
     'html/images/*.png',
     'html/images/*.jpg'
 }
