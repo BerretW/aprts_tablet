@@ -161,8 +161,11 @@ RegisterNUICallback('installApp', function(data, cb)
 end)
 
 -- Příjem obsahu (HTML) z pluginů
-RegisterNetEvent('dt_tablet:loadContent') -- Zachována zpětná kompatibilita názvu eventu
-AddEventHandler('dt_tablet:loadContent', function(htmlContent)
+RegisterNetEvent('aprts_tablet:loadContent') -- Zachována zpětná kompatibilita názvu eventu
+AddEventHandler('aprts_tablet:loadContent', function(htmlContent)
+    -- Bezpečnostní kontrola
+    if not isTabletOpen then return end 
+
     SendNUIMessage({
         action = "setAppContent",
         html = htmlContent

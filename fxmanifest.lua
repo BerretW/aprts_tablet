@@ -14,7 +14,7 @@ files {
     'html/libs/sweetalert2.all.min.js',
     'html/libs/animate.min.css',
     'html/libs/all.min.css',
-    
+    'html/webfonts/*', 
     'html/index.html',
     
     -- Styly
