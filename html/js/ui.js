@@ -18,37 +18,38 @@ const UI = {
   },
 
   // Aplikování vzhledu (Modern vs Retro)
-  applyTheme: (osType, wallpaperUrl) => {
+applyTheme: (osType, wallpaperUrl) => {
     const root = $("#tablet-os-root");
 
     // 1. Definujeme mapování: Logický OS -> Vizuální Třída
-    // Pokud zde OS nenajde, použije defaultně 'theme-modern'
     const themeMapping = {
       retro: "theme-retro",
       kali_os: "theme-kali",
-      // Všechny tyto varianty budou vypadat jako Moderní tablet
       Apparatus_1: "theme-modern",
       Apparatus_2: "theme-modern",
-
       android: "theme-modern",
     };
 
     // Zjistíme třídu (nebo fallback na modern)
     let visualClass = themeMapping[osType] || "theme-modern";
 
-    // Reset tříd a přidání té správné
-    root.removeClass("theme-modern theme-retro").addClass(visualClass);
+    // =================================================================
+    // OPRAVA ZDE: Musíme odebrat i "theme-kali", aby nezůstala viset
+    // =================================================================
+    root.removeClass("theme-modern theme-retro theme-kali").addClass(visualClass);
 
-    // Logika tapety (Retro ji nemá, Moderní ano)
+    // Logika tapety (Retro a Kali ji většinou nemají dynamickou, Moderní ano)
     const screen = $(".screen");
+    
+    // Reset background image style, aby se nepřenášela tapeta z moderního na kali/retro
+    screen.css("background-image", "none"); 
+
     if (
       visualClass === "theme-modern" &&
       wallpaperUrl &&
       wallpaperUrl !== "none"
     ) {
       screen.css("background-image", `url(${wallpaperUrl})`);
-    } else {
-      screen.css("background-image", "none");
     }
   },
 
