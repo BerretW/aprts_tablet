@@ -261,3 +261,8 @@ RegisterCommand('fixtablet', function()
     end
     print("[Tablet] Resetován příkazem /fixtablet")
 end)
+
+RegisterNetEvent('aprts_tablet:sendNui')
+AddEventHandler('aprts_tablet:sendNui', function(data)
+    SendNUIMessage(data)
+end)
