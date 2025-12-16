@@ -26,6 +26,7 @@ files {
     'html/js/state.js',
     'html/js/ui.js',
     'html/js/system.js',
+    'html/js/modules/*.js',       -- Načteme všechny moduly
     'html/js/main.js',
 
     'html/images/*.png',

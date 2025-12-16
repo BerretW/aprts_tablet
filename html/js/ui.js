@@ -146,26 +146,33 @@ const UI = {
     // 3. STATUS BAR (HORNÍ LIŠTA)
     // -------------------------------------------------------------------------
 
-    updateStatusBar: (time, hasWifi, wifiName) => {
-        // Aktualizace času
-        $('#clock').text(time);
+updateStatusBar: (time, hasWifi, wifiName, wifiLevel, battery) => {
+    // 1. Čas
+    $('#clock').text(time);
 
-        // Výběr ikony signálu
-        const signalIcon = $('.status-bar .fa-signal, .status-bar .fa-wifi, .status-bar .fa-ban');
-        
-        // Reset tříd
-        signalIcon.removeClass('fa-signal fa-wifi fa-ban');
+    // 2. Wi-Fi
+    const signalIcon = $('.status-bar .fa-signal, .status-bar .fa-wifi, .status-bar .fa-ban');
+    signalIcon.removeClass('fa-signal fa-wifi fa-ban');
 
-        if (hasWifi) {
-            // Máme Wi-Fi
-            signalIcon.addClass('fa-wifi');
-            $('#network-name').text(wifiName); 
-        } else {
-            // Nemáme Wi-Fi -> Offline
-            signalIcon.addClass('fa-ban'); 
-            $('#network-name').text('Odpojeno');
-        }
-    },
+    if (hasWifi) {
+        signalIcon.addClass('fa-wifi');
+        $('#network-name').html(`${wifiName} <span style="font-size:10px; opacity:0.7;">(${wifiLevel}/4)</span>`); 
+    } else {
+        signalIcon.addClass('fa-ban'); 
+        $('#network-name').text('Odpojeno');
+    }
+
+    // 3. Baterie (Pokud ji chceš zobrazit v liště)
+    // Přidej do HTML: <span id="battery-status"></span> vedle hodin
+    let batIcon = 'fa-battery-full';
+    if(battery < 20) batIcon = 'fa-battery-empty';
+    else if(battery < 50) batIcon = 'fa-battery-quarter';
+    else if(battery < 75) batIcon = 'fa-battery-half';
+
+    // Pokud nemáš element v HTML, můžeš ho dynamicky přidat nebo jen logovat
+    // $('#battery-icon').attr('class', 'fas ' + batIcon);
+    // $('#battery-percent').text(battery + '%');
+},
 
     // -------------------------------------------------------------------------
     // 4. NAVIGACE (PŘEPÍNÁNÍ OKEN)

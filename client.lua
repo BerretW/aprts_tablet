@@ -204,55 +204,106 @@ end
 -- ====================================================================
 -- 6. SYNC LOOP (ČAS + WIFI)
 -- ====================================================================
+-- Stavové proměnné
+local currentBattery = 100
+local currentWifiLevel = 0 -- 0 až 4 čárky
+local currentWifiName = "Žádný signál"
+local hasInternet = false
 
--- Funkce pro kontrolu Wifi
-local function GetWifiStatus()
+-- Funkce pro výpočet stavu (Interní)
+local function UpdateSystemStatus()
     local ped = PlayerPedId()
     local pos = GetEntityCoords(ped)
-    local connected = false
-    local wifiLabel = "Žádný signál"
+    
+    -- 1. Wi-Fi Logic
+    hasInternet = false
+    currentWifiName = "Žádný signál"
+    currentWifiLevel = 0
 
     for _, zone in pairs(Config.WifiZones) do
         local dist = #(pos - zone.coords)
         if dist < zone.radius then
-            connected = true
-            wifiLabel = zone.label
+            hasInternet = true
+            currentWifiName = zone.label
+            
+            -- Výpočet síly signálu podle vzdálenosti (jednoduchá matematika)
+            local signalPct = 1.0 - (dist / zone.radius)
+            if signalPct > 0.8 then currentWifiLevel = 4
+            elseif signalPct > 0.6 then currentWifiLevel = 3
+            elseif signalPct > 0.4 then currentWifiLevel = 2
+            else currentWifiLevel = 1 end
+            
             break -- Jsme v dosahu jedné, stačí
         end
     end
 
-    return connected, wifiLabel
+    -- 2. Baterie Logic (vybíjí se jen když je tablet otevřený)
+    if isTabletOpen and currentBattery > 0 then
+        -- Vybíjení: Náhodně odečte 1% každých cca 20-30 sekund loopu
+        if math.random(1, 100) < 5 then 
+            currentBattery = currentBattery - 1
+        end
+    elseif not isTabletOpen and currentBattery < 100 then
+        -- Nabíjení v kapse (pomalé)
+        if math.random(1, 100) < 2 then
+            currentBattery = currentBattery + 1
+        end
+    end
 end
 
--- Hlavní loop pro aktualizaci dat v UI
+-- Hlavní loop
 CreateThread(function()
     while true do
+        UpdateSystemStatus() -- Aktualizovat data
+
         if isTabletOpen then
-            -- 1. Získání herního času
             local hours = GetClockHours()
             local minutes = GetClockMinutes()
-            -- Formátování na 00:00
             if hours < 10 then hours = "0" .. hours end
             if minutes < 10 then minutes = "0" .. minutes end
             local timeString = hours .. ":" .. minutes
 
-            -- 2. Kontrola Wi-Fi
-            local hasWifi, wifiName = GetWifiStatus()
-
-            -- 3. Odeslání do UI
+            -- Odeslání do UI
             SendNUIMessage({
                 action = "updateInfobar",
                 time = timeString,
-                wifi = hasWifi,
-                wifiName = wifiName
+                wifi = hasInternet,
+                wifiName = currentWifiName,
+                wifiLevel = currentWifiLevel, -- Posíláme i level
+                battery = currentBattery      -- Posíláme i baterii
             })
 
-            Wait(2000) -- Stačí aktualizovat jednou za 2 sekundy
+            Wait(2000)
         else
-            Wait(1000)
+            Wait(5000) -- Když je zavřený, kontrolujeme méně často
         end
     end
 end)
+
+-- ====================================================================
+-- 7. EXPORT PRO PLUGINY (API)
+-- ====================================================================
+
+-- Tuto funkci budou volat pluginy
+local function GetTabletData()
+    return {
+        isOpen = isTabletOpen,
+        battery = currentBattery,
+        wifi = {
+            isConnected = hasInternet,
+            name = currentWifiName,
+            level = currentWifiLevel, -- 0-4
+            strengthPct = (currentWifiLevel / 4) * 100
+        },
+        time = {
+            hours = GetClockHours(),
+            minutes = GetClockMinutes()
+        }
+    }
+end
+
+-- Registrace exportu
+exports('GetTabletData', GetTabletData)
 
 RegisterCommand('fixtablet', function()
     isTabletOpen = false
