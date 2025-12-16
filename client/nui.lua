@@ -69,3 +69,17 @@ end)
 exports('SendNui', function(data)
     SendNUIMessage(data)
 end)
+
+RegisterNUICallback('addCalendarEvent', function(data, cb)
+    if currentSerial then
+        TriggerServerEvent('aprts_tablet:server:addCalendarEvent', currentSerial, data.date, data.time, data.title)
+    end
+    cb('ok')
+end)
+
+RegisterNUICallback('deleteCalendarEvent', function(data, cb)
+    if currentSerial then
+        TriggerServerEvent('aprts_tablet:server:deleteCalendarEvent', currentSerial, data.id)
+    end
+    cb('ok')
+end)

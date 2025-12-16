@@ -1,119 +1,152 @@
--- ====================================================================
--- FILE: server.lua
--- ====================================================================
 local QBCore = exports['qb-core']:GetCoreObject()
 
--- Pomocná funkce pro načtení tabletu z DB a odeslání klientovi
--- local function LoadAndOpenTablet(source, serial, model)
---     -- 1. Zkusíme najít tablet
---     local result = exports.oxmysql:singleSync('SELECT * FROM player_tablets WHERE serial = ?', {serial})
-    
---     local tabletData = {}
---     local tabletModel = model or 'tablet_basic'
-
---     if result then
---         tabletData = json.decode(result.tablet_data) or {}
---         -- Pokud je v DB jiný model než v itemu, můžeme to ignorovat nebo aktualizovat
---     else
---         -- 2. Pokud neexistuje, VYTVOŘÍME HO HNED TEĎ
---         print('^3[Tablet] Vytvářím nový záznam v DB pro serial: '..serial..'^0')
---         tabletData = { 
---             installedApps = {'store', 'settings', 'calendar'}, 
---             background = (tabletModel == 'tablet_pro') and 'https://files.catbox.moe/w8s1z6.jpg' or 'none',
---             calendarEvents = {} 
---         }
-        
---         exports.oxmysql:insert('INSERT INTO player_tablets (serial, model, tablet_data) VALUES (?, ?, ?)', {
---             serial, tabletModel, json.encode(tabletData)
---         })
---     end
-
---     TriggerClientEvent('aprts_tablet:client:loadTablet', source, serial, tabletModel, tabletData)
--- end
-
--- EVENTY
-
+-- ====================================================================
+-- OTEVŘENÍ TABLETU (Načtení dat)
+-- ====================================================================
 RegisterNetEvent('aprts_tablet:server:openBySlot', function(slot)
     local src = source
     local item = exports.ox_inventory:GetSlot(src, slot)
 
     if item and item.name == 'tablet' then
-        -- 1. Načtení metadat
         local meta = item.metadata or {}
         local serial = meta.serial
-        -- ZDE JE OPRAVA: Bereme model z metadat, pokud není, tak default 'tablet_basic'
-        local model = meta.model or 'tablet_basic' 
+        local model = meta.model or 'tablet_basic'
         
-        local isLocked = meta.locked or false
-        local pin = meta.pin or "0000"
-
-        -- 2. Pokud tablet nemá sériové číslo (nový item), vygenerujeme ho
+        -- Pokud serial neexistuje, vytvoříme nový
         if not serial then
             serial = "TAB-" .. math.random(100000, 999999)
-            
-            -- Aktualizujeme metadata v inventáři
             local newMeta = {
                 serial = serial,
-                model = model, -- Uložíme model
+                model = model,
                 battery = 100,
                 locked = false,
                 pin = "0000",
                 description = "Sériové číslo: " .. serial
             }
             exports.ox_inventory:SetMetadata(src, slot, newMeta)
-            
-            -- Aktualizujeme lokální proměnné pro další běh kódu
             meta = newMeta
         end
         
-        -- Uložení aktivního slotu pro pozdější update
         if not PlayerTablets then PlayerTablets = {} end
         PlayerTablets[src] = { serial = serial, slot = slot }
 
-        -- 3. Načtení dat z Databáze (obsah tabletu)
-        local dbData = {}
+        -- 1. Načtení/Vytvoření hlavních dat tabletu
         local result = exports.oxmysql:singleSync('SELECT * FROM player_tablets WHERE serial = ?', {serial})
-        
+        local dbData = {}
+        local batteryLevel = 100
+
         if result then
             dbData = json.decode(result.tablet_data) or {}
-            
-            -- Volitelné: Pokud je v DB uložen jiný model než v itemu, můžeme aktualizovat DB
-            if result.model ~= model then
-                exports.oxmysql:update('UPDATE player_tablets SET model = ? WHERE serial = ?', {model, serial})
-            end
+            -- Načteme baterii z DB sloupce, pokud je NULL, použijeme 100
+            batteryLevel = result.battery or 100
         else
-            -- Vytvoření záznamu v DB, pokud neexistuje
-            -- Pokud je to 'tablet_pro', dáme mu defaultně hezčí pozadí
+            -- Vytvoření nového záznamu
             local defaultBg = (model == 'tablet_pro') and 'https://files.catbox.moe/w8s1z6.jpg' or 'none'
-            
             dbData = { 
                 installedApps = {'store', 'settings', 'calendar'}, 
-                background = defaultBg,
-                calendarEvents = {} 
+                background = defaultBg
             }
-            
-            exports.oxmysql:insert('INSERT INTO player_tablets (serial, model, tablet_data) VALUES (?, ?, ?)', {
-                serial, model, json.encode(dbData)
+            -- Vložíme s defaultní baterií 100
+            exports.oxmysql:insert('INSERT INTO player_tablets (serial, model, tablet_data, battery) VALUES (?, ?, ?, ?)', {
+                serial, model, json.encode(dbData), 100
             })
+            batteryLevel = 100
         end
 
-        -- 4. Odeslání klientovi
-        -- OPRAVA: Místo 'tablet_pro' posíláme proměnnou 'model'
+        -- 2. Načtení Kalendáře z NOVÉ TABULKY
+        local calendarRows = exports.oxmysql:executeSync('SELECT * FROM player_tablets_calendar WHERE serial = ?', {serial})
+        local formattedCalendar = {}
+
+        -- Převedeme SQL řádky na formát, který očekává JS (Object s klíči "D-M-YYYY")
+        for _, row in ipairs(calendarRows) do
+            local key = row.event_date -- "16-12-2025"
+            if not formattedCalendar[key] then formattedCalendar[key] = {} end
+            
+            table.insert(formattedCalendar[key], {
+                id = row.id, -- Potřebujeme ID pro mazání
+                time = row.event_time,
+                title = row.title
+            })
+        end
+        
+        -- Přidáme kalendář do dat pro klienta
+        dbData.calendarEvents = formattedCalendar
+
+        -- 3. Odeslání klientovi
         TriggerClientEvent('aprts_tablet:client:loadTablet', src, serial, model, dbData, {
             isLocked = meta.locked,
             pin = meta.pin,
-            battery = meta.battery or 100
+            battery = batteryLevel -- Posíláme baterii z SQL
         })
     end
 end)
 
--- 2. Event pro změnu PINu
+-- ====================================================================
+-- UKLÁDÁNÍ BATERIE (SQL + Metadata)
+-- ====================================================================
+RegisterNetEvent('aprts_tablet:server:updateBattery', function(serial, batteryLevel)
+    local src = source
+    
+    -- 1. Update SQL Sloupce
+    exports.oxmysql:update('UPDATE player_tablets SET battery = ? WHERE serial = ?', {
+        batteryLevel, serial
+    })
+
+    -- 2. Update Metadat v inventáři (aby to bylo vidět v tooltipu)
+    local tabletInfo = PlayerTablets and PlayerTablets[src]
+    if tabletInfo and tabletInfo.serial == serial then
+        local item = exports.ox_inventory:GetSlot(src, tabletInfo.slot)
+        if item and item.name == 'tablet' and item.metadata.serial == serial then
+            local meta = item.metadata
+            meta.battery = batteryLevel
+            exports.ox_inventory:SetMetadata(src, tabletInfo.slot, meta)
+        end
+    end
+end)
+
+-- Update baterie při nabíjení (podle slotu)
+RegisterNetEvent('aprts_tablet:server:updateBatteryBySlot', function(slot, serial, batteryLevel)
+    local src = source
+    
+    -- SQL Update
+    exports.oxmysql:update('UPDATE player_tablets SET battery = ? WHERE serial = ?', {
+        batteryLevel, serial
+    })
+
+    -- Inventory Update
+    local item = exports.ox_inventory:GetSlot(src, slot)
+    if item and item.name == 'tablet' and item.metadata.serial == serial then
+        local meta = item.metadata
+        meta.battery = batteryLevel
+        exports.ox_inventory:SetMetadata(src, slot, meta)
+    end
+end)
+
+-- ====================================================================
+-- KALENDÁŘ - NOVÉ EVENTY PRO SQL
+-- ====================================================================
+
+-- Přidání události
+RegisterNetEvent('aprts_tablet:server:addCalendarEvent', function(serial, date, time, title)
+    exports.oxmysql:insert('INSERT INTO player_tablets_calendar (serial, event_date, event_time, title) VALUES (?, ?, ?, ?)', {
+        serial, date, time, title
+    })
+end)
+
+-- Smazání události
+RegisterNetEvent('aprts_tablet:server:deleteCalendarEvent', function(serial, eventId)
+    exports.oxmysql:execute('DELETE FROM player_tablets_calendar WHERE serial = ? AND id = ?', {
+        serial, eventId
+    })
+end)
+
+-- ====================================================================
+-- OSTATNÍ (PIN, Lock, AppData) - Původní kód
+-- ====================================================================
 RegisterNetEvent('aprts_tablet:server:setPin', function(newPin)
     local src = source
     local tabletInfo = PlayerTablets and PlayerTablets[src]
-    
     if tabletInfo then
-        -- Upravíme metadata na konkrétním slotu
         local item = exports.ox_inventory:GetSlot(src, tabletInfo.slot)
         if item and item.metadata.serial == tabletInfo.serial then
             local meta = item.metadata
@@ -122,10 +155,10 @@ RegisterNetEvent('aprts_tablet:server:setPin', function(newPin)
         end
     end
 end)
+
 RegisterNetEvent('aprts_tablet:server:setLockState', function(state)
     local src = source
     local tabletInfo = PlayerTablets and PlayerTablets[src]
-    
     if tabletInfo then
         local item = exports.ox_inventory:GetSlot(src, tabletInfo.slot)
         if item and item.metadata.serial == tabletInfo.serial then
@@ -136,109 +169,38 @@ RegisterNetEvent('aprts_tablet:server:setLockState', function(state)
     end
 end)
 
--- 4. Event při úspěšném odemčení PINem (Aby zůstal odemčený, když ho někomu dám)
 RegisterNetEvent('aprts_tablet:server:unlockSuccess', function()
     local src = source
     local tabletInfo = PlayerTablets and PlayerTablets[src]
-    
     if tabletInfo then
         local item = exports.ox_inventory:GetSlot(src, tabletInfo.slot)
         if item and item.metadata.serial == tabletInfo.serial then
             local meta = item.metadata
-            meta.locked = false -- Odemkneme v metadatech
+            meta.locked = false
             exports.ox_inventory:SetMetadata(src, tabletInfo.slot, meta)
         end
     end
 end)
--- Uložení dat aplikací (Sync)
+
 RegisterNetEvent('aprts_tablet:server:saveTabletData', function(serial, newData)
+    -- Zde ukládáme jen obecná data (appky, pozadí), kalendář už ne
+    -- Musíme vyčistit calendarEvents z newData, aby se neukládal do JSONu duplicitně
+    newData.calendarEvents = nil 
+    
     exports.oxmysql:update('UPDATE player_tablets SET tablet_data = ? WHERE serial = ?', {
         json.encode(newData), serial
     })
 end)
 
--- NOVÉ: Uložení baterie při zavření
-RegisterNetEvent('aprts_tablet:server:updateBattery', function(serial, batteryLevel)
-    local src = source
-    -- Musíme najít item v inventáři podle serialu a aktualizovat metadata
-    -- OX Inventory nemá přímý "GetItemByMetadata", takže musíme iterovat nebo si poslat slot
-    -- Pro jednoduchost zde aktualizujeme DB, pokud bychom chtěli perzistenci i přes zahození itemu,
-    -- ale správně pro OX Inventory je update metadat:
-    
-    local items = exports.ox_inventory:GetInventoryItems(src)
-    for slot, item in pairs(items) do
-        if item.name == 'tablet' and item.metadata and item.metadata.serial == serial then
-            local meta = item.metadata
-            meta.battery = batteryLevel
-            exports.ox_inventory:SetMetadata(src, slot, meta)
-            break
-        end
-    end
-end)
-
--- Příkaz pro adminy
-RegisterCommand('givetablet', function(source, args)
-    local src = source
-    -- Argument 1: model (tablet_basic nebo tablet_air), defaultně basic
-    local modelType = args[1] or 'tablet_basic' 
-    
-    local serial = "TAB-" .. math.random(100000, 999999)
-    
-    exports.ox_inventory:AddItem(src, 'tablet', 1, {
-        serial = serial,
-        model = modelType, -- Tady se určuje typ
-        battery = 100,
-        pin = "0000",
-        locked = false,
-        description = "Model: " .. modelType .. " | S/N: " .. serial
-    })
-    
-    print('^2[Tablet] Hráči '..src..' dán tablet typu: '..modelType..'^0')
-end, true)
-
 RegisterNetEvent('aprts_tablet:server:saveAppData', function(serial, appName, key, value)
-    -- 1. Načíst data z DB
     local result = exports.oxmysql:singleSync('SELECT tablet_data FROM player_tablets WHERE serial = ?', {serial})
     if result and result.tablet_data then
         local data = json.decode(result.tablet_data)
-        
-        -- 2. Vytvořit strukturu, pokud neexistuje
         if not data.appData then data.appData = {} end
         if not data.appData[appName] then data.appData[appName] = {} end
-        
-        -- 3. Uložit hodnotu
         data.appData[appName][key] = value
-        
-        -- 4. Update DB
         exports.oxmysql:update('UPDATE player_tablets SET tablet_data = ? WHERE serial = ?', {
             json.encode(data), serial
         })
-    end
-end)
-
-RegisterNetEvent('aprts_tablet:server:updateBattery', function(serial, batteryLevel)
-    local src = source
-    local tabletInfo = PlayerTablets and PlayerTablets[src]
-
-    -- 1. Zkusíme použít uložený slot z momentu otevření (nejrychlejší)
-    if tabletInfo and tabletInfo.serial == serial then
-        local item = exports.ox_inventory:GetSlot(src, tabletInfo.slot)
-        if item and item.name == 'tablet' and item.metadata.serial == serial then
-            local meta = item.metadata
-            meta.battery = batteryLevel
-            exports.ox_inventory:SetMetadata(src, tabletInfo.slot, meta)
-            return -- Hotovo, nemusíme hledat dál
-        end
-    end
-
-    -- 2. Fallback: Pokud hráč tablet přesunul, musíme ho najít (původní smyčka)
-    local items = exports.ox_inventory:GetInventoryItems(src)
-    for slot, item in pairs(items) do
-        if item.name == 'tablet' and item.metadata and item.metadata.serial == serial then
-            local meta = item.metadata
-            meta.battery = batteryLevel
-            exports.ox_inventory:SetMetadata(src, slot, meta)
-            break
-        end
     end
 end)

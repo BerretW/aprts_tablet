@@ -1,10 +1,11 @@
+// html/js/modules/calendar.js
+
 System.registerModule('calendar', {
     label: 'Kalendář',
     icon: 'fas fa-calendar-alt',
     color: '#e84393',
 
     render: function() {
-        // Inicializace při prvním otevření
         if(!AppState.calendarView) {
             let now = new Date();
             AppState.calendarView = { month: now.getMonth(), year: now.getFullYear() };
@@ -19,7 +20,6 @@ System.registerModule('calendar', {
 
         let monthNames = ["Leden", "Únor", "Březen", "Duben", "Květen", "Červen", "Červenec", "Srpen", "Září", "Říjen", "Listopad", "Prosinec"];
 
-        // Všimni si: System.Apps.calendar.changeMonth(...)
         let html = `
             <div class="calendar-wrapper">
                 <div class="calendar-header">
@@ -48,14 +48,13 @@ System.registerModule('calendar', {
             let isToday = i === realDate.getDate() && viewMonth === realDate.getMonth() && viewYear === realDate.getFullYear();
             let eventKey = `${i}-${viewMonth + 1}-${viewYear}`;
             let rawData = AppState.calendarEvents[eventKey];
-            let hasEvent = rawData && (typeof rawData === "string" || rawData.length > 0);
+            let hasEvent = rawData && rawData.length > 0;
             
             let classes = "calendar-day";
             if (isToday) classes += " today";
             if (hasEvent) classes += " has-event";
             let indicator = hasEvent ? `<div class="event-dots"></div>` : "";
 
-            // Volání System.Apps.calendar.openModal
             html += `
                 <div class="${classes}" onclick="System.Apps.calendar.openModal(${i}, ${viewMonth + 1}, ${viewYear})">
                     <span class="day-num">${i}</span>
@@ -66,8 +65,6 @@ System.registerModule('calendar', {
         html += `</div><div class="calendar-footer"><p><i class="fas fa-info-circle"></i> Kliknutím na den naplánujete událost.</p></div></div></div>`;
         $("#app-content").html(html);
     },
-
-    // --- LOGIKA MODULU ---
 
     changeMonth: function(direction) {
         AppState.calendarView.month += direction;
@@ -90,28 +87,24 @@ System.registerModule('calendar', {
     openModal: function(day, month, year) {
         AppState.editingDateKey = `${day}-${month}-${year}`;
         let rawData = AppState.calendarEvents[AppState.editingDateKey];
-        let events = [];
-        if (typeof rawData === "string") events = [{ time: "--:--", title: rawData }];
-        else if (Array.isArray(rawData)) events = rawData;
+        let events = Array.isArray(rawData) ? rawData : [];
 
         $("#modal-date-title").text(`${day}. ${month}. ${year}`);
         $("#event-title").val("");
         
-        // Změna: renderEventList voláme z tohoto objektu (this)
         this.renderEventList(events);
         
-    $(".new-event-form button").off("click").on("click", function() {
-        System.Apps.calendar.addEvent();
-    });
+        $(".new-event-form button").off("click").on("click", function() {
+            System.Apps.calendar.addEvent();
+        });
         
-            // Fix pro Enter klávesu
-    $("#event-title").off("keydown").on("keydown", function(e) {
-        if(e.key === 'Enter'){ 
-            System.Apps.calendar.addEvent(); 
-            e.preventDefault(); 
-        }
-    });
-this.renderEventList(events);
+        $("#event-title").off("keydown").on("keydown", function(e) {
+            if(e.key === 'Enter'){ 
+                System.Apps.calendar.addEvent(); 
+                e.preventDefault(); 
+            }
+        });
+
         $("#calendar-modal").css("display", "flex").hide().fadeIn(200);
     },
 
@@ -124,11 +117,14 @@ this.renderEventList(events);
         }
         events.sort((a, b) => a.time.localeCompare(b.time));
         events.forEach((ev, index) => {
-            // Tlačítko smazat: System.Apps.calendar.deleteEvent(...)
+            // ZDE JE ZMĚNA: předáváme ID eventu pro SQL mazání
+            // Pokud je to čerstvě přidaná událost bez ID (jen lokální), pošleme index jako fallback, ale správně by se měl reloadnout
+            let idParam = ev.id ? ev.id : `'TEMP_${index}'`;
+            
             list.append(`
                 <div class="event-item">
                     <div><span class="time">${ev.time}</span><span>${ev.title}</span></div>
-                    <span class="delete-btn" onclick="System.Apps.calendar.deleteEvent(${index})">&times;</span>
+                    <span class="delete-btn" onclick="System.Apps.calendar.deleteEvent('${idParam}', ${index})">&times;</span>
                 </div>
             `);
         });
@@ -141,23 +137,31 @@ this.renderEventList(events);
         let title = titleInput.val();
         if (!title || title.trim() === "") return;
         
-        let key = AppState.editingDateKey;
+        let key = AppState.editingDateKey; // Formát: 16-12-2025
         if (!key) return;
         
-        let rawData = AppState.calendarEvents[key];
-        let events = Array.isArray(rawData) ? rawData : [];
-        if (typeof rawData === "string") events = [{ time: "Celý den", title: rawData }];
+        if (!AppState.calendarEvents[key]) AppState.calendarEvents[key] = [];
         
-        events.push({ time: time, title: title });
-        AppState.calendarEvents[key] = events;
+        // 1. Odeslat na server do nové tabulky
+        $.post("https://aprts_tablet/addCalendarEvent", JSON.stringify({
+            date: key,
+            time: time,
+            title: title
+        }));
+
+        // 2. Přidat lokálně (pro okamžité zobrazení bez nutnosti znovu načítat z DB)
+        // Poznámka: Nebudeme mít hned skutečné ID z databáze, ale pro zobrazení to stačí.
+        // Při příštím otevření tabletu se načte správné ID.
+        AppState.calendarEvents[key].push({ time: time, title: title, id: null });
         
-        this.renderEventList(events);
+        this.renderEventList(AppState.calendarEvents[key]);
         titleInput.val("").focus();
-        System.syncToCloud();
-        this.render(); // Překreslí kalendář (tečky) na pozadí
+        
+        // NEVOLÁME syncToCloud(), protože data jsou již v SQL
+        this.render(); // Překreslí tečky na kalendáři
     },
 
-    deleteEvent: function(index) {
+    deleteEvent: function(sqlId, arrayIndex) {
         Swal.fire({
             title: "Smazat událost?",
             text: "Tuto akci nelze vrátit!",
@@ -173,13 +177,21 @@ this.renderEventList(events);
             if (result.isConfirmed) {
                 let key = AppState.editingDateKey;
                 let events = AppState.calendarEvents[key];
+                
                 if (Array.isArray(events)) {
-                    events.splice(index, 1);
+                    // 1. Smazat ze serveru (pokud má ID)
+                    if (sqlId && sqlId !== 'TEMP_' + arrayIndex) {
+                        $.post("https://aprts_tablet/deleteCalendarEvent", JSON.stringify({
+                            id: sqlId
+                        }));
+                    }
+
+                    // 2. Smazat lokálně
+                    events.splice(arrayIndex, 1);
                     if (events.length === 0) delete AppState.calendarEvents[key];
                     else AppState.calendarEvents[key] = events;
                     
                     this.renderEventList(events || []);
-                    System.syncToCloud();
                     this.render();
                     
                     Swal.fire({ icon: "success", title: "Smazáno", toast: true, position: "top-end", showConfirmButton: false, timer: 1500, background: "#1e1e1e", color: "#fff" });
