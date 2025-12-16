@@ -6,7 +6,7 @@ const AppState = {
     activeApp: null,       
     isOpen: false,
     hasInternet: false,
-    batteryHistory: [100, 100, 100, 100, 100, 100], // Defaultní hodnoty, aby graf nebyl prázdný
+    batteryHistory: [{ time: "INIT", value: 100 }], // Defaultní hodnoty, aby graf nebyl prázdný
     // Nastavení uživatele (defaultní hodnoty)
     userSettings: {
         showWifiPct: false, // Defaultně vypnuto

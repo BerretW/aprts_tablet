@@ -21,7 +21,6 @@ $(document).ready(function () {
         );
         AppState.hasInternet = data.wifi;
         AppState.batteryHistory.push(data.battery);
-        // Pokud je v historii více než 10 záznamů, smažeme ten nejstarší (posuvný graf)
         if (AppState.batteryHistory.length > 10) {
           AppState.batteryHistory.shift();
         }
