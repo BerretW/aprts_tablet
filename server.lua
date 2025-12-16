@@ -37,36 +37,91 @@ RegisterNetEvent('aprts_tablet:server:openBySlot', function(slot)
     local src = source
     local item = exports.ox_inventory:GetSlot(src, slot)
 
-    if item and item.name == 'tablet' and item.metadata and item.metadata.serial then
-        -- Pokud má item uložený stav baterie v metadatech, pošleme ho klientovi
-        -- (To vyžaduje malou úpravu v klientovi, viz níže)
-        local battery = item.metadata.battery or 100
-        TriggerClientEvent('aprts_tablet:client:setBattery', src, battery)
+    if item and item.name == 'tablet' then
+        -- Načteme metadata, pokud neexistují, nastavíme default
+        local meta = item.metadata or {}
+        local pin = meta.pin or "0000"
+        local isLocked = meta.locked or false -- Defaultně odemčeno
+        local serial = meta.serial
 
-        LoadAndOpenTablet(src, item.metadata.serial, item.metadata.model)
-    else
-        -- Pokud item nemá serial, vygenerujeme ho a uložíme do metadat (fix pro "čisté" itemy)
-        if item and item.name == 'tablet' and (not item.metadata or not item.metadata.serial) then
-            local newSerial = "TAB-" .. math.random(100000, 999999)
-            local newModel = 'tablet_basic' -- Default
-            
-            -- Update metadat v inventáři
-            local newMetadata = item.metadata or {}
-            newMetadata.serial = newSerial
-            newMetadata.model = newModel
-            newMetadata.battery = 100
-            newMetadata.description = "Sériové číslo: " .. newSerial
+        -- Pokud serial chybí, vygenerujeme (fix pro nové itemy)
+        if not serial then
+            serial = "TAB-" .. math.random(100000, 999999)
+            meta.serial = serial
+            exports.ox_inventory:SetMetadata(src, slot, meta)
+        end
+        
+        -- Důležité: Uložíme si aktuální slot tabletu pro tohoto hráče
+        -- abychom věděli, kam zapisovat změny PINu
+        if not PlayerTablets then PlayerTablets = {} end
+        PlayerTablets[src] = { serial = serial, slot = slot }
 
-            exports.ox_inventory:SetMetadata(src, slot, newMetadata)
-            
-            -- Otevřeme s novým serialem
-            LoadAndOpenTablet(src, newSerial, newModel)
+        -- Načteme DB data (aplikace, pozadí...)
+        local dbData = {}
+        local result = exports.oxmysql:singleSync('SELECT * FROM player_tablets WHERE serial = ?', {serial})
+        
+        if result then
+            dbData = json.decode(result.tablet_data) or {}
         else
-            print('^1[Tablet] Chyba: Neplatná data slotu.^0')
+            -- Vytvoření v DB
+            dbData = { installedApps = {'store', 'settings', 'calendar'}, background = 'none' }
+            exports.oxmysql:insert('INSERT INTO player_tablets (serial, model, tablet_data) VALUES (?, ?, ?)', {
+                serial, 'tablet_basic', json.encode(dbData)
+            })
+        end
+
+        -- Odeslání klientovi vč. stavu zámku a PINu z metadat
+        TriggerClientEvent('aprts_tablet:client:loadTablet', src, serial, 'tablet_pro', dbData, {
+            isLocked = isLocked,
+            pin = pin,
+            battery = meta.battery or 100
+        })
+    end
+end)
+
+-- 2. Event pro změnu PINu
+RegisterNetEvent('aprts_tablet:server:setPin', function(newPin)
+    local src = source
+    local tabletInfo = PlayerTablets and PlayerTablets[src]
+    
+    if tabletInfo then
+        -- Upravíme metadata na konkrétním slotu
+        local item = exports.ox_inventory:GetSlot(src, tabletInfo.slot)
+        if item and item.metadata.serial == tabletInfo.serial then
+            local meta = item.metadata
+            meta.pin = newPin
+            exports.ox_inventory:SetMetadata(src, tabletInfo.slot, meta)
+        end
+    end
+end)
+RegisterNetEvent('aprts_tablet:server:setLockState', function(state)
+    local src = source
+    local tabletInfo = PlayerTablets and PlayerTablets[src]
+    
+    if tabletInfo then
+        local item = exports.ox_inventory:GetSlot(src, tabletInfo.slot)
+        if item and item.metadata.serial == tabletInfo.serial then
+            local meta = item.metadata
+            meta.locked = state
+            exports.ox_inventory:SetMetadata(src, tabletInfo.slot, meta)
         end
     end
 end)
 
+-- 4. Event při úspěšném odemčení PINem (Aby zůstal odemčený, když ho někomu dám)
+RegisterNetEvent('aprts_tablet:server:unlockSuccess', function()
+    local src = source
+    local tabletInfo = PlayerTablets and PlayerTablets[src]
+    
+    if tabletInfo then
+        local item = exports.ox_inventory:GetSlot(src, tabletInfo.slot)
+        if item and item.metadata.serial == tabletInfo.serial then
+            local meta = item.metadata
+            meta.locked = false -- Odemkneme v metadatech
+            exports.ox_inventory:SetMetadata(src, tabletInfo.slot, meta)
+        end
+    end
+end)
 -- Uložení dat aplikací (Sync)
 RegisterNetEvent('aprts_tablet:server:saveTabletData', function(serial, newData)
     exports.oxmysql:update('UPDATE player_tablets SET tablet_data = ? WHERE serial = ?', {

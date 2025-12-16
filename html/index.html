@@ -27,7 +27,33 @@
           <div id="boot-screen">
             <div id="boot-logo"></div>
           </div>
+<div id="login-screen" style="display: none;">
+    <div class="login-content">
+        <i class="fas fa-lock" style="font-size: 40px; margin-bottom: 20px; color: white;"></i>
+        <h2 id="login-msg">Zadejte PIN</h2>
+        
+        <!-- Tečky indikující zadání -->
+        <div class="pin-dots">
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        </div>
 
+        <!-- Keypad -->
+        <div class="pin-pad">
+            <button onclick="System.Login.press(1)">1</button>
+            <button onclick="System.Login.press(2)">2</button>
+            <button onclick="System.Login.press(3)">3</button>
+            <button onclick="System.Login.press(4)">4</button>
+            <button onclick="System.Login.press(5)">5</button>
+            <button onclick="System.Login.press(6)">6</button>
+            <button onclick="System.Login.press(7)">7</button>
+            <button onclick="System.Login.press(8)">8</button>
+            <button onclick="System.Login.press(9)">9</button>
+            <button class="empty"></button>
+            <button onclick="System.Login.press(0)">0</button>
+            <button class="action" onclick="System.Login.backspace()"><i class="fas fa-backspace"></i></button>
+        </div>
+    </div>
+</div>
           <!-- System Content -->
           <div id="os-content" style="display: none; height: 100%">
             <div class="status-bar">

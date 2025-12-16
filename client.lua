@@ -2,10 +2,10 @@ local isTabletOpen = false
 local tabletProp = nil
 local currentSerial = nil
 local currentBattery = 100
-local lastHistoryUpdate = 0 
+local lastHistoryUpdate = 0
 local batteryHistory = {} -- Tabulka pro historii
 local isConnectedToCharger = false
-local chargerCoords = nil 
+local chargerCoords = nil
 
 -- Animace
 local tabletModel = "prop_cs_tablet"
@@ -18,8 +18,16 @@ local RegisteredApps = {}
 if not Config then
     Config = {}
     Config.Tablets = {
-        ['tablet_basic'] = { os = "retro", bootTime = 3000, wallpaper = "none" },
-        ['tablet_pro'] = { os = "modern", bootTime = 1500, wallpaper = "https://files.catbox.moe/w8s1z6.jpg" }
+        ['tablet_basic'] = {
+            os = "retro",
+            bootTime = 3000,
+            wallpaper = "none"
+        },
+        ['tablet_pro'] = {
+            os = "modern",
+            bootTime = 1500,
+            wallpaper = "https://files.catbox.moe/w8s1z6.jpg"
+        }
     }
 end
 
@@ -28,7 +36,9 @@ end
 -- ====================================================================
 
 exports('useTablet', function(data)
-    if isTabletOpen then return end -- Zamezení spamu
+    if isTabletOpen then
+        return
+    end -- Zamezení spamu
     if data and data.slot then
         StartTabletAnimation()
         TriggerServerEvent('aprts_tablet:server:openBySlot', data.slot)
@@ -49,12 +59,12 @@ end)
 -- ====================================================================
 
 RegisterNetEvent('aprts_tablet:client:loadTablet')
-AddEventHandler('aprts_tablet:client:loadTablet', function(serial, model, dbData)
+AddEventHandler('aprts_tablet:client:loadTablet', function(serial, model, dbData,metaData)
     local tabletConfig = Config.Tablets[model]
-    if not tabletConfig then 
-        print("^1[Tablet] Neznámý model tabletu: "..tostring(model).."^0")
+    if not tabletConfig then
+        print("^1[Tablet] Neznámý model tabletu: " .. tostring(model) .. "^0")
         StopTabletAnimation()
-        return 
+        return
     end
 
     if not isTabletOpen then
@@ -75,13 +85,29 @@ AddEventHandler('aprts_tablet:client:loadTablet', function(serial, model, dbData
             installedApps = dbData.installedApps,
             wallpaper = dbData.background or tabletConfig.wallpaper,
             calendarEvents = dbData.calendarEvents or {},
-            batteryHistory = batteryHistory -- Posíláme historii grafu
+            batteryHistory = batteryHistory, -- Posíláme historii grafu
+            isLocked = metaData.isLocked,
+            pin = metaData.pin
         }
 
         SendNUIMessage(payload)
     end
 end)
+-- Callbacks
+RegisterNUICallback('setPin', function(data, cb)
+    TriggerServerEvent('aprts_tablet:server:setPin', data.pin)
+    cb('ok')
+end)
 
+RegisterNUICallback('setLockState', function(data, cb)
+    TriggerServerEvent('aprts_tablet:server:setLockState', data.locked)
+    cb('ok')
+end)
+
+RegisterNUICallback('unlockSuccess', function(data, cb)
+    TriggerServerEvent('aprts_tablet:server:unlockSuccess')
+    cb('ok')
+end)
 RegisterNetEvent('aprts_tablet:client:setBattery')
 AddEventHandler('aprts_tablet:client:setBattery', function(val)
     currentBattery = val
@@ -91,7 +117,7 @@ end)
 -- 3. EXPORTY A REGISTRACE APLIKACÍ
 -- ====================================================================
 
-exports('RegisterApp', function(appName, label, iconClass, color, eventToTrigger,restrictedJobs)
+exports('RegisterApp', function(appName, label, iconClass, color, eventToTrigger, restrictedJobs)
     RegisteredApps[appName] = {
         event = eventToTrigger,
         jobs = restrictedJobs -- Např. {['police'] = true, ['ambulance'] = true}
@@ -122,13 +148,15 @@ RegisterNUICallback('closeTablet', function(data, cb)
     isTabletOpen = false
     SetNuiFocus(false, false)
     StopTabletAnimation()
-    
+
     -- Pokud je připojen k nabíječce a zavře se, necháme animaci nabíjení (pokud chceme), 
     -- nebo ho necháme jen stát. Zde rušíme animaci tabletu.
     if isConnectedToCharger then
         local ped = PlayerPedId()
         RequestAnimDict("cellphone@")
-        while not HasAnimDictLoaded("cellphone@") do Wait(10) end
+        while not HasAnimDictLoaded("cellphone@") do
+            Wait(10)
+        end
         TaskPlayAnim(ped, "cellphone@", "cellphone_text_in", 8.0, -8.0, -1, 50, 0, false, false, false)
     end
 
@@ -144,10 +172,12 @@ RegisterNUICallback('openAppRequest', function(data, cb)
         -- KONTROLA JOBU (QBCore příklad)
         local PlayerData = QBCore.Functions.GetPlayerData()
         local myJob = PlayerData.job.name
-        
+
         if appData.jobs and not appData.jobs[myJob] then
             -- Hráč nemá správný job
-            TriggerEvent('chat:addMessage', { args = {'^1[Tablet]', 'Nemáš oprávnění pro tuto aplikaci!'} })
+            TriggerEvent('chat:addMessage', {
+                args = {'^1[Tablet]', 'Nemáš oprávnění pro tuto aplikaci!'}
+            })
             return cb('error')
         end
 
@@ -161,7 +191,7 @@ end)
 RegisterNUICallback('syncData', function(data, cb)
     if currentSerial then
         -- Důležité: Přidáme aktuální serverovou historii do dat k uložení
-        data.batteryHistory = batteryHistory 
+        data.batteryHistory = batteryHistory
         TriggerServerEvent('aprts_tablet:server:saveTabletData', currentSerial, data)
     end
     cb('ok')
@@ -174,8 +204,13 @@ end)
 
 RegisterNetEvent('aprts_tablet:loadContent')
 AddEventHandler('aprts_tablet:loadContent', function(htmlContent)
-    if not isTabletOpen then return end
-    SendNUIMessage({ action = "setAppContent", html = htmlContent })
+    if not isTabletOpen then
+        return
+    end
+    SendNUIMessage({
+        action = "setAppContent",
+        html = htmlContent
+    })
 end)
 
 -- ====================================================================
@@ -186,12 +221,17 @@ function StartTabletAnimation()
     CreateThread(function()
         local ped = PlayerPedId()
         RequestAnimDict(tabletDict)
-        while not HasAnimDictLoaded(tabletDict) do Wait(10) end
+        while not HasAnimDictLoaded(tabletDict) do
+            Wait(10)
+        end
         RequestModel(tabletModel)
-        while not HasModelLoaded(tabletModel) do Wait(10) end
+        while not HasModelLoaded(tabletModel) do
+            Wait(10)
+        end
 
         tabletProp = CreateObject(GetHashKey(tabletModel), 0, 0, 0, true, true, true)
-        AttachEntityToEntity(tabletProp, ped, GetPedBoneIndex(ped, 28422), -0.05, 0.0, 0.0, 0.0, 0.0, 0.0, true, true, false, true, 1, true)
+        AttachEntityToEntity(tabletProp, ped, GetPedBoneIndex(ped, 28422), -0.05, 0.0, 0.0, 0.0, 0.0, 0.0, true, true,
+            false, true, 1, true)
         TaskPlayAnim(ped, tabletDict, tabletAnim, 8.0, -8.0, -1, 50, 0, false, false, false)
     end)
 end
@@ -210,26 +250,38 @@ end
 -- ====================================================================
 
 function ConnectCharger(coords)
-    if isConnectedToCharger then return end
+    if isConnectedToCharger then
+        return
+    end
     local ped = PlayerPedId()
     chargerCoords = coords or GetEntityCoords(ped)
     isConnectedToCharger = true
 
-    TriggerEvent('chat:addMessage', { args = {'^2[Tablet]', 'Tablet připojen k nabíječce.'} })
+    TriggerEvent('chat:addMessage', {
+        args = {'^2[Tablet]', 'Tablet připojen k nabíječce.'}
+    })
 
     if not isTabletOpen then
         RequestAnimDict("cellphone@")
-        while not HasAnimDictLoaded("cellphone@") do Wait(10) end
+        while not HasAnimDictLoaded("cellphone@") do
+            Wait(10)
+        end
         TaskPlayAnim(ped, "cellphone@", "cellphone_text_in", 8.0, -8.0, -1, 50, 0, false, false, false)
     end
 end
 
 function DisconnectCharger()
-    if not isConnectedToCharger then return end
+    if not isConnectedToCharger then
+        return
+    end
     isConnectedToCharger = false
     chargerCoords = nil
-    TriggerEvent('chat:addMessage', { args = {'^1[Tablet]', 'Tablet odpojen.'} })
-    if not isTabletOpen then ClearPedTasks(PlayerPedId()) end
+    TriggerEvent('chat:addMessage', {
+        args = {'^1[Tablet]', 'Tablet odpojen.'}
+    })
+    if not isTabletOpen then
+        ClearPedTasks(PlayerPedId())
+    end
 end
 
 exports('ConnectCharger', ConnectCharger)
@@ -253,10 +305,14 @@ CreateThread(function()
                 hasInternet = true
                 currentWifiName = zone.label
                 local signalPct = 1.0 - (dist / zone.radius)
-                if signalPct > 0.8 then currentWifiLevel = 4
-                elseif signalPct > 0.6 then currentWifiLevel = 3
-                elseif signalPct > 0.4 then currentWifiLevel = 2
-                else currentWifiLevel = 1
+                if signalPct > 0.8 then
+                    currentWifiLevel = 4
+                elseif signalPct > 0.6 then
+                    currentWifiLevel = 3
+                elseif signalPct > 0.4 then
+                    currentWifiLevel = 2
+                else
+                    currentWifiLevel = 1
                 end
                 break
             end
@@ -281,8 +337,12 @@ CreateThread(function()
         end
 
         -- Limity
-        if currentBattery > 100 then currentBattery = 100 end
-        if currentBattery < 0 then currentBattery = 0 end
+        if currentBattery > 100 then
+            currentBattery = 100
+        end
+        if currentBattery < 0 then
+            currentBattery = 0
+        end
 
         -- 4. Ukládání historie (Interval 30 minut)
         local gameTimer = GetGameTimer()
@@ -323,11 +383,12 @@ CreateThread(function()
             SetNuiFocus(false, false)
             StopTabletAnimation()
             isTabletOpen = false
-            TriggerEvent('chat:addMessage', { args = {'^1[Tablet]', 'Baterie kritická!'} })
+            TriggerEvent('chat:addMessage', {
+                args = {'^1[Tablet]', 'Baterie kritická!'}
+            })
         end
     end
 end)
-
 
 -- ====================================================================
 -- 7. EXPORT PRO PLUGINY (API)
