@@ -25,7 +25,8 @@ const onMessage = (event) => {
         data.wifiName,
         data.wifiLevel,
         data.battery,
-        data.isCharging
+        data.isCharging,
+            data.wifiLocked // Nový parametr
       );
       AppState.hasInternet = data.wifi;
       AppState.batteryHistory.push(data.battery);

@@ -204,3 +204,122 @@ RegisterNetEvent('aprts_tablet:server:saveAppData', function(serial, appName, ke
         })
     end
 end)
+
+-- ====================================================================
+-- WIFI ROUTER SYSTÉM
+-- ====================================================================
+
+local PlacedRouters = {}
+
+-- Načtení routerů při startu
+CreateThread(function()
+    local routers = exports.oxmysql:executeSync('SELECT * FROM placed_routers')
+    for _, router in ipairs(routers) do
+        router.coords = json.decode(router.coords)
+        PlacedRouters[router.id] = router
+    end
+end)
+
+-- Synchronizace s klienty (při připojení)
+RegisterNetEvent('aprts_tablet:server:requestRouters', function()
+    TriggerClientEvent('aprts_tablet:client:syncRouters', source, PlacedRouters)
+end)
+
+-- Použití itemu (Router)
+local function UseRouterItem(event, item, inventory, slot, data)
+    print("Použití routeru: " .. item.name)
+    local src = inventory.id
+    local routerType = item.name -- 'router_basic' nebo 'router_advanced'
+    local routerConfig = Config.RouterTypes[routerType]
+    
+    if not routerConfig then 
+        print('^1[Tablet] Chyba: Neznámý typ routeru: ' .. routerType .. '^0')
+        return 
+    end
+
+    -- Dialog pro zadání SSID a hesla
+    local input = lib.callback.await('aprts_tablet:client:openRouterDialog', src)
+    if not input then return end -- Zrušil dialog
+
+    local ssid = input[1]
+    local password = input[2] -- Může být prázdné
+
+    if not ssid or #ssid < 3 then 
+        TriggerClientEvent('ox_lib:notify', src, {type='error', description='Název sítě je příliš krátký!'})
+        return 
+    end
+    if password and #password == 0 then password = nil end -- Prázdné heslo = nil
+
+    local ped = GetPlayerPed(src)
+    local coords = GetEntityCoords(ped)
+    -- Položíme ho na zem
+    local placeCoords = vector3(coords.x, coords.y, coords.z - 0.98)
+
+    -- Uložit do DB
+    local id = exports.oxmysql:insertSync('INSERT INTO placed_routers (coords, ssid, password, type) VALUES (?, ?, ?, ?)', {
+        json.encode(placeCoords), ssid, password, routerType
+    })
+
+    if id then
+        -- Odebrat item
+        exports.ox_inventory:RemoveItem(src, routerType, 1)
+
+        -- Přidat do cache a syncnout všem
+        local newRouter = {
+            id = id,
+            coords = placeCoords,
+            ssid = ssid,
+            password = password,
+            type = routerType
+        }
+        PlacedRouters[id] = newRouter
+        TriggerClientEvent('aprts_tablet:client:addRouter', -1, newRouter)
+    end
+end
+
+-- Registrace itemů (musí odpovídat klíčům v Config.RouterTypes)
+for item, _ in pairs(Config.RouterTypes) do
+    exports.ox_inventory:registerHook('createItem', function(payload)
+        return payload
+    end, {
+        print = false,
+        itemFilter = { [item] = true }
+    })
+    
+    -- OX Inventory použití itemu se dělá přes export, ale jednodušší je
+    -- použít QBCore UseItem event pokud používáš QB, nebo ESX.
+    -- Pro univerzálnost zde předpokládáme QBCore, pokud máš ESX, uprav si registraci.
+    if QBCore then
+        QBCore.Functions.CreateUseableItem(item, function(source, item)
+            -- print("Použití routeru: " .. item.name)
+            UseRouterItem(nil, item, {id=source}, nil, nil)
+        end)
+    end
+end
+
+-- Sbírání routeru
+RegisterNetEvent('aprts_tablet:server:pickupRouter', function(routerId)
+    local src = source
+    local router = PlacedRouters[routerId]
+    
+    if router then
+        -- Smazat z DB
+        exports.oxmysql:execute('DELETE FROM placed_routers WHERE id = ?', {routerId})
+        
+        -- Vrátit item
+        exports.ox_inventory:AddItem(src, router.type, 1)
+        
+        -- Sync smazání
+        PlacedRouters[routerId] = nil
+        TriggerClientEvent('aprts_tablet:client:removeRouter', -1, routerId)
+    end
+end)
+
+-- Ověření hesla (Callback)
+lib.callback.register('aprts_tablet:server:verifyWifi', function(source, routerId, inputPassword)
+    local router = PlacedRouters[routerId]
+    if not router then return false end
+    
+    if not router.password then return true end -- Nemá heslo
+    return router.password == inputPassword
+end)

@@ -4,17 +4,16 @@
    ========================================================================== */
 
 const System = {
-  Apps: {}, // Kontejner pro interní moduly (Store, Settings...)
+  Apps: {},
 
   // ==========================================================================
   // 1. AUDIO SYSTÉM
   // ==========================================================================
   playSound: (type) => {
-    // Hledáme element <audio id="sound-type"> v index.html
     let audio = document.getElementById("sound-" + type);
     if (audio) {
       audio.currentTime = 0;
-      audio.volume = 0.3; // Hlasitost
+      audio.volume = 0.3;
       audio.play().catch((e) => console.log("Audio play blocked", e));
     }
   },
@@ -23,43 +22,38 @@ const System = {
   // 2. REGISTRACE MODULŮ
   // ==========================================================================
   registerModule: (name, config) => {
-    // 1. Uložení logiky modulu
     System.Apps[name] = config;
-
-    // 2. Registrace do seznamu aplikací (pro UI ikony)
     AppState.allRegisteredApps[name] = {
       appName: name,
       label: config.label,
       iconClass: config.icon,
       color: config.color,
-      size: config.size || 20, // Default pro interní moduly
+      size: config.size || 20,
       supportedOS: config.supportedOS || 'all'
     };
-
-    // 3. Auto-instalace systémových appek
     if (!AppState.installedApps.includes(name)) {
       AppState.installedApps.push(name);
     }
   },
 
   // ==========================================================================
-  // 3. BOOT & INIT (Start systému)
+  // 3. BOOT & INIT
   // ==========================================================================
   boot: (payload) => {
-    AppState.currentData = payload; // Uložíme si data ze serveru (vč. PINu a Lock stavu)
+    AppState.currentData = payload; 
 
-    // Sloučení nainstalovaných appek z DB a systémových modulů
+    // Načtení/Init uložených sítí
+    AppState.savedNetworks = payload.savedNetworks || {}; 
+
     let dbApps = payload.installedApps || [];
     Object.keys(System.Apps).forEach((modName) => {
       if (!dbApps.includes(modName)) dbApps.push(modName);
     });
     AppState.installedApps = dbApps;
 
-    // Inicializace kalendáře
     AppState.calendarEvents = payload.calendarEvents || {};
     if (Array.isArray(AppState.calendarEvents)) AppState.calendarEvents = {};
 
-    // Nastavení Configu
     AppState.currentConfig = {
       os: payload.os,
       storage: payload.storage || 1024,
@@ -67,18 +61,15 @@ const System = {
       wallpaper: payload.wallpaper,
     };
 
-    // Reset stavu
     AppState.activeApp = null;
     UI.showAppFrame(false);
     UI.applyTheme(AppState.currentConfig.os, AppState.currentConfig.wallpaper);
     UI.toggleTablet(true);
 
-    // Zobrazíme Boot Screen, skryjeme zbytek
     $("#os-content").hide();
     $("#login-screen").hide();
     $("#boot-screen").show();
 
-    // Boot Logo/Text podle OS
     const bootText =
       AppState.currentConfig.os === "retro"
         ? `> SYSTEM CHECK... OK\n> MEMORY... OK\n> SECURITY... ${
@@ -88,22 +79,19 @@ const System = {
 
     $("#boot-logo").html(bootText);
 
-    // Načtení historie baterie
     if (payload.batteryHistory && payload.batteryHistory.length > 0) {
       AppState.batteryHistory = payload.batteryHistory;
     } else {
       AppState.batteryHistory = [{ time: "Teď", value: 100 }];
     }
 
-    // Simulační čas bootování
     setTimeout(() => {
       $("#boot-screen").fadeOut(300, function () {
-        // Rozhodování: LOGIN vs PLOCHA
         if (payload.isLocked) {
           System.Login.init(payload.pin);
         } else {
           $("#os-content").fadeIn(300);
-          System.playSound("notify"); // Zvuk startu
+          System.playSound("notify");
         }
       });
       UI.renderHomeScreen();
@@ -111,7 +99,7 @@ const System = {
   },
 
   // ==========================================================================
-  // 4. LOGIN SYSTÉM (PIN)
+  // 4. LOGIN SYSTÉM
   // ==========================================================================
   Login: {
     currentInput: "",
@@ -128,8 +116,7 @@ const System = {
       if (System.Login.currentInput.length < 4) {
         System.Login.currentInput += num;
         System.Login.updateDots();
-        System.playSound("click"); // Zvuk kliknutí
-
+        System.playSound("click");
         if (System.Login.currentInput.length === 4) {
           setTimeout(System.Login.verify, 200);
         }
@@ -151,17 +138,13 @@ const System = {
 
     verify: () => {
       if (System.Login.currentInput === System.Login.correctPin) {
-        // ÚSPĚCH
         System.playSound("notify");
         $("#login-screen").fadeOut(200, function () {
           $("#os-content").fadeIn(300);
         });
-
-        // Odeslat serveru info o odemčení (změna metadat na locked=false)
         $.post("https://aprts_tablet/unlockSuccess", JSON.stringify({}));
       } else {
-        // CHYBA
-        System.playSound("lock"); // Zvuk chyby
+        System.playSound("lock");
         $(".pin-dots .dot").addClass("error");
         System.Login.currentInput = "";
         setTimeout(System.Login.updateDots, 400);
@@ -170,73 +153,38 @@ const System = {
   },
 
   // ==========================================================================
-  // 5. CORE FUNKCE (Navigace, Sync)
+  // 5. CORE FUNKCE
   // ==========================================================================
   openApp: (appName) => {
-    // Kontrola oprávnění (Job check - volitelné, pokud implementováno v Lua)
-    // Zde jen UI logika:
-
-    // 1. Je to interní modul? (Store, Settings, Calendar)
     if (System.Apps[appName]) {
       AppState.activeApp = appName;
       UI.showAppFrame(true);
-
-      // Retro navigace
-      if (AppState.currentConfig.os === "retro")
-        $(".retro-nav-bar").css("display", "flex");
-
-      // Spustíme render funkci modulu
+      if (AppState.currentConfig.os === "retro") $(".retro-nav-bar").css("display", "flex");
       System.Apps[appName].render();
       return;
     }
-
-    // 2. Je to externí plugin?
     const app = AppState.allRegisteredApps[appName];
     if (app) {
       AppState.activeApp = appName;
       UI.showAppFrame(true);
-
-      if (AppState.currentConfig.os === "retro")
-        $(".retro-nav-bar").css("display", "flex");
-
-      // Voláme Lua event
-      $.post(
-        "https://aprts_tablet/openAppRequest",
-        JSON.stringify({ appId: appName })
-      );
+      if (AppState.currentConfig.os === "retro") $(".retro-nav-bar").css("display", "flex");
+      $.post("https://aprts_tablet/openAppRequest", JSON.stringify({ appId: appName }));
     }
   },
+
   lockDevice: () => {
-    // Pokud není nastaven PIN nebo zámek není aktivní, jen zhasneme/rozsvítíme (volitelné)
-    // Ale pro bezpečnost předpokládáme, že chceš zamknout.
-
-    // Zvuk zamčení
     System.playSound("lock");
-
-    // Přechod na Login obrazovku
     $("#os-content").fadeOut(200);
-
-    // Inicializujeme Login s aktuálním PINem
-    // Pokud PIN nebyl nastaven, použije se default "0000"
     let currentPin = AppState.currentData.pin || "0000";
     System.Login.init(currentPin);
-
-    // Volitelně: Můžeme poslat na server info, že se zamknul,
-    // aby zůstal zamčený i po zavření/otevření inventáře.
-    $.post(
-      "https://aprts_tablet/setLockState",
-      JSON.stringify({
-        locked: true,
-      })
-    );
-
-    // Aktualizujeme lokální stav pro Settings
+    $.post("https://aprts_tablet/setLockState", JSON.stringify({ locked: true }));
     AppState.currentData.isLocked = true;
   },
+
   goHome: () => {
     AppState.activeApp = null;
     UI.showAppFrame(false);
-    $("#app-content").empty(); // Vyčistit obsah aplikace
+    $("#app-content").empty();
     $("#calendar-modal").fadeOut(100);
   },
 
@@ -245,62 +193,114 @@ const System = {
       installedApps: AppState.installedApps,
       background: AppState.currentConfig.wallpaper,
       calendarEvents: AppState.calendarEvents,
+      savedNetworks: AppState.savedNetworks
     };
     $.post("https://aprts_tablet/syncData", JSON.stringify(dataToSave));
   },
 
-  // Pomocná funkce pro tlačítka v HTML obsahu pluginů (např. Crypto nákup)
   pluginAction: (appId, actionName, data = {}) => {
     System.playSound("click");
-    $.post(
-      "https://aprts_tablet/appAction",
-      JSON.stringify({
+    $.post("https://aprts_tablet/appAction", JSON.stringify({
         appId: appId,
         action: actionName,
         data: data,
-      })
-    );
+    }));
   },
 
   // ==========================================================================
-  // 6. API PRO PLUGINY (Grafy, Notifikace, Update DOM)
+  // 6. WIFI PŘIPOJENÍ (OPRAVENO A PŘIDÁNO)
+  // ==========================================================================
+  connectToProtectedWifi: (ssid) => {
+    // 1. Kontrola uloženého hesla
+    if (AppState.savedNetworks && AppState.savedNetworks[ssid]) {
+       $.post('https://aprts_tablet/connectToWifi', JSON.stringify({
+            password: AppState.savedNetworks[ssid]
+        }), function(response) {
+            if (response.status === 'ok') {
+                System.API.showNotification({ title: 'Připojeno', text: `Připojeno k ${ssid}`, icon: 'success', toast: true });
+                // Refresh settings pokud je otevřen
+                if(AppState.activeApp === 'settings') System.Apps.settings.render();
+            } else {
+                System.API.showNotification({ title: 'Chyba', text: 'Uložené heslo je nesprávné.', icon: 'error', toast: true });
+                delete AppState.savedNetworks[ssid];
+                System.connectToProtectedWifi(ssid); // Zkusit znovu ručně
+            }
+        });
+        return; 
+    }
+
+    // 2. Dialog pro heslo
+    if (typeof Swal !== "undefined") {
+      Swal.fire({
+        title: `Připojit k síti`,
+        text: `Síť "${ssid}" je chráněná heslem.`,
+        input: "password",
+        inputPlaceholder: "Zadejte heslo",
+        showCancelButton: true,
+        confirmButtonText: "Připojit",
+        cancelButtonText: "Zrušit",
+        background: "#1e1e1e",
+        color: "#fff",
+      }).then((result) => {
+        if (result.isConfirmed) {
+          const password = result.value;
+          $.post("https://aprts_tablet/connectToWifi", JSON.stringify({
+              password: password,
+          }), function (response) {
+              if (response.status === "ok") {
+                // Uložit heslo
+                if(!AppState.savedNetworks) AppState.savedNetworks = {};
+                AppState.savedNetworks[ssid] = password;
+                System.syncToCloud();
+
+                System.API.showNotification({
+                  title: "Připojeno",
+                  text: "Úspěšně připojeno k Wi-Fi.",
+                  icon: "success",
+                  toast: true,
+                });
+                
+                if(AppState.activeApp === 'settings') System.Apps.settings.render();
+
+              } else {
+                System.API.showNotification({
+                  title: "Chyba",
+                  text: "Nesprávné heslo nebo ztráta signálu.",
+                  icon: "error",
+                  toast: true,
+                });
+              }
+          });
+        }
+      });
+    } else {
+      console.error("SweetAlert2 není načten!");
+    }
+  },
+
+  // ==========================================================================
+  // 7. API PRO PLUGINY
   // ==========================================================================
   API: {
     renderChart: (payload) => {
       setTimeout(() => {
         const ctx = document.getElementById(payload.targetId);
-        if (!ctx)
-          return console.warn(
-            `[Tablet API] Canvas #${payload.targetId} nenalezen.`
-          );
-
+        if (!ctx) return;
         if (!window.activeCharts) window.activeCharts = {};
-        // Pokud graf existuje, zničíme ho (refresh)
         if (window.activeCharts[payload.targetId]) {
           window.activeCharts[payload.targetId].destroy();
           delete window.activeCharts[payload.targetId];
         }
-
         try {
           if (typeof Chart !== "undefined") {
-            window.activeCharts[payload.targetId] = new Chart(
-              ctx,
-              payload.config
-            );
-          } else {
-            console.error("[Tablet API] Knihovna Chart.js není načtena!");
+            window.activeCharts[payload.targetId] = new Chart(ctx, payload.config);
           }
-        } catch (e) {
-          console.error("[Tablet API] Chyba při vytváření grafu:", e);
-        }
-      }, 150); // Krátký delay pro jistotu, že je DOM ready
+        } catch (e) { console.error(e); }
+      }, 150);
     },
 
     showNotification: (payload) => {
-      if (typeof Swal === "undefined")
-        return console.error("SweetAlert2 není načten!");
-
-      // Zvuk notifikace
+      if (typeof Swal === "undefined") return console.error("SweetAlert2 není načten!");
       if (payload.icon === "error") System.playSound("lock");
       else System.playSound("notify");
 
@@ -323,13 +323,9 @@ const System = {
       if (el.length) {
         if (payload.isHtml) el.html(payload.content);
         else el.text(payload.content);
-
         if (payload.animate) {
           el.addClass("animate__animated animate__pulse");
-          setTimeout(
-            () => el.removeClass("animate__animated animate__pulse"),
-            1000
-          );
+          setTimeout(() => el.removeClass("animate__animated animate__pulse"), 1000);
         }
       }
     },

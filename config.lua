@@ -40,35 +40,49 @@ Config.Tablets = {
 }
 
 Config.SystemApps = { 'settings', 'store', 'calendar' }
-
+Config.RouterTypes = {
+    ['router_basic'] = {
+        prop = 'hei_prop_server_piece_01',
+        range = 15.0,
+        label = "Základní Router"
+    },
+    ['router_advanced'] = {
+        prop = 'hei_prop_server_piece_01', -- Příklad jiného modelu
+        range = 40.0,
+        label = "Profi Router"
+    }
+}
 -- Wi-Fi Zóny
 -- Pokud je hráč mimo tyto zóny, tablet nebude mít internet (Store nebude fungovat)
 Config.WifiZones = {
     {
         label = "Public Library",
-        coords = vector3(216.96, -238.15, 53.96), -- Příklad souřadnic
-        radius = 50.0, -- Dosah v metrech
-        strength = "strong" -- Pro budoucí využití
+        coords = vector3(216.96, -238.15, 53.96),
+        radius = 50.0,
+        strength = "strong",
+        password = "775695905" -- VEŘEJNÁ (připojí se sama)
     },
     {
         label = "Police Station",
         coords = vector3(441.87, -981.93, 30.69),
         radius = 80.0,
-        strength = "medium"
+        strength = "medium",
+        password = "pd_secure" -- ZAMČENÁ (bude chtít heslo)
     },
     {
         label = "Mechanic Shop",
         coords = vector3(-347.26, -133.31, 39.01),
         radius = 40.0,
-        strength = "weak"
+        strength = "weak",
+        password = "fix" -- ZAMČENÁ
     },
     {
         label = "Downtown Cafe",
-        coords = vec3(-1136.22, -1964.65, 17.24),
+        coords = vector3(-1136.22, -1964.65, 17.24),
         radius = 30.0,
-        strength = "strong"
+        strength = "strong",
+        password = nil -- VEŘEJNÁ
     }
-    -- Zde si přidej další místa
 }
 
 -- Baterie

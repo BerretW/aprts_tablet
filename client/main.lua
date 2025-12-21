@@ -1,8 +1,10 @@
 -- ====================================================================
--- MAIN LOGIC & EVENTS
+-- FILE: client/main.lua
 -- ====================================================================
 
+-- ====================================================================
 -- 1. POUŽITÍ PŘEDMĚTU
+-- ====================================================================
 exports('useTablet', function(data)
     if isTabletOpen then return end
     
@@ -28,7 +30,9 @@ RegisterCommand('fixtablet', function()
     print("[Tablet] Resetován příkazem /fixtablet")
 end)
 
+-- ====================================================================
 -- 2. NAČTENÍ DAT A OTEVŘENÍ NUI
+-- ====================================================================
 RegisterNetEvent('aprts_tablet:client:loadTablet')
 AddEventHandler('aprts_tablet:client:loadTablet', function(serial, model, dbData, metaData)
     local tabletConfig = Config.Tablets[model]
@@ -98,34 +102,51 @@ CreateThread(function()
         hasInternet = false
         currentWifiName = "Žádný signál"
         currentWifiLevel = 0
+        local isLockedWifi = false -- Nová proměnná pro UI (Zámek)
 
-        -- 1. Wi-Fi Logic
+        -- 1. Logika připojení (Simkarta vs Wifi)
+        
+        -- Má tablet SIM kartu? (Priorita)
         local simCardSupport = false
         if currentModel and Config.Tablets[currentModel] and Config.Tablets[currentModel].hasSimCard then
             simCardSupport = true
         end
 
         if simCardSupport then
+            -- SIM Karta = Vždy internet
             hasInternet = true
             currentWifiName = "4G LTE"
             currentWifiLevel = 4
+            isLockedWifi = false
         else
-            for _, zone in pairs(Config.WifiZones) do
-                local dist = #(pos - zone.coords)
-                if dist < zone.radius then
-                    hasInternet = true
-                    currentWifiName = zone.label
-                    local signalPct = 1.0 - (dist / zone.radius)
-                    if signalPct > 0.8 then currentWifiLevel = 4
-                    elseif signalPct > 0.6 then currentWifiLevel = 3
-                    elseif signalPct > 0.4 then currentWifiLevel = 2
-                    else currentWifiLevel = 1 end
-                    break
+            -- Používáme Wi-Fi
+            -- Zde voláme funkci z client/wifi.lua
+            if GetBestWifiSignal then
+                local signal = GetBestWifiSignal(pos)
+                
+                hasInternet = signal.connected
+                currentWifiName = signal.name
+                currentWifiLevel = signal.level
+                isLockedWifi = signal.isLocked -- Zjistíme, jestli je síť zamčená
+            else
+                -- Fallback pro případ, že wifi.lua chybí (pouze statické zóny z Configu)
+                for _, zone in pairs(Config.WifiZones) do
+                    local dist = #(pos - zone.coords)
+                    if dist < zone.radius then
+                        hasInternet = true
+                        currentWifiName = zone.label
+                        local signalPct = 1.0 - (dist / zone.radius)
+                        if signalPct > 0.8 then currentWifiLevel = 4
+                        elseif signalPct > 0.6 then currentWifiLevel = 3
+                        elseif signalPct > 0.4 then currentWifiLevel = 2
+                        else currentWifiLevel = 1 end
+                        break
+                    end
                 end
             end
         end
 
-        -- 2. Kontrola kabelu
+        -- 2. Kontrola kabelu nabíječky
         if isConnectedToCharger and chargerCoords then
             if #(pos - chargerCoords) > 1.5 then
                 DisconnectCharger()
@@ -149,7 +170,7 @@ CreateThread(function()
             if currentBattery < 0 then currentBattery = 0 end
         end
 
-        -- 4. Ukládání historie
+        -- 4. Ukládání historie baterie
         local gameTimer = GetGameTimer()
         if (gameTimer - lastHistoryUpdate) > (Config.HistoryInterval * 60000) then
             lastHistoryUpdate = gameTimer
@@ -177,12 +198,13 @@ CreateThread(function()
                 wifi = hasInternet,
                 wifiName = currentWifiName,
                 wifiLevel = currentWifiLevel,
+                wifiLocked = isLockedWifi, -- Posíláme info o zámku do JS
                 battery = math.floor(currentBattery),
                 isCharging = isConnectedToCharger
             })
         end
 
-        -- Kritická baterie
+        -- Kritická baterie - Vypnutí tabletu
         if currentBattery <= 0 and isTabletOpen and not isConnectedToCharger then
             SetNuiFocus(false, false)
             StopTabletAnimation()
