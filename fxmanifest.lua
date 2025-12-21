@@ -2,7 +2,7 @@ fx_version "cerulean"
 lua54 'yes'
 
 author 'SpoiledMouse'
-version '1.0.2'
+version '1.0.3'
 description 'aprts_tablet'
 
 games {"gta5"}
@@ -45,6 +45,7 @@ client_scripts {
     'client/main.lua'       -- 6. Hlavní smyčka a eventy
 }
 server_script 'server.lua'
+
 exports {
     'RegisterApp',
     'GetTabletData',
@@ -53,5 +54,6 @@ exports {
     'ConnectCharger',
     'DisconnectCharger',
     'useTablet',
-    'SendNui'
+    'SendNui',
+    'loadContent'
 }

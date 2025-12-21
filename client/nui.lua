@@ -83,3 +83,12 @@ RegisterNUICallback('deleteCalendarEvent', function(data, cb)
     end
     cb('ok')
 end)
+
+exports("loadContent", function(htmlContent)
+    if not isTabletOpen then return end
+    print("Loading content into tablet NUI...")
+    SendNUIMessage({
+        action = "setAppContent",
+        html = htmlContent
+    })
+end)
