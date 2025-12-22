@@ -90,15 +90,6 @@ Config.BatteryDrainRate = 0.5  -- Kolik % ubude každých X sekund (když je ote
 Config.BatteryChargeRate = 2.0 -- Rychlost nabíjení
 Config.BatteryTick = 5000     
 Config.HistoryInterval = 30
--- Nabíjecí stanice (Souřadnice míst, kde se tablet nabíjí)
-Config.ChargingStations = {
-    vector3(441.25, -982.50, 30.69), -- Police Station (recepce)
-    vector3(-1082.0, -247.5, 37.76), -- Lifeinvader
-    vector3(228.6, -993.4, -99.5),   -- Příklad interiéru
-    -- Přidej si další...
-}
-
- -- Interval
 
 -- Definice nabíjecích míst (statické souřadnice)
 Config.ChargerLocations = {

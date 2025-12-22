@@ -7,6 +7,14 @@ local AuthenticatedRouters = {}
 -- ====================================================================
 -- SYNCHRONIZACE DAT
 -- ====================================================================
+
+AddEventHandler("onClientResourceStart", function(resourceName)
+    if GetCurrentResourceName() ~= resourceName then
+        return
+    end
+    TriggerServerEvent('aprts_tablet:server:requestRouters')
+end)
+
 RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
     TriggerServerEvent('aprts_tablet:server:requestRouters')
 end)
