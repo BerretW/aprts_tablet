@@ -44,7 +44,7 @@ const System = {
 
     // Načtení/Init uložených sítí
     AppState.savedNetworks = payload.savedNetworks || {}; 
-
+    AppState.hasInternet = payload.wifi; 
     let dbApps = payload.installedApps || [];
     Object.keys(System.Apps).forEach((modName) => {
       if (!dbApps.includes(modName)) dbApps.push(modName);
@@ -60,7 +60,15 @@ const System = {
       bootTime: payload.bootTime || 2000,
       wallpaper: payload.wallpaper,
     };
-
+    UI.updateStatusBar(
+        "00:00", // Čas se aktualizuje později sám
+        payload.wifi,
+        payload.wifiName,
+        payload.wifiLevel,
+        payload.batteryHistory[payload.batteryHistory.length - 1].value || 100,
+        false,
+        payload.wifiLocked
+    );
     AppState.activeApp = null;
     UI.showAppFrame(false);
     UI.applyTheme(AppState.currentConfig.os, AppState.currentConfig.wallpaper);

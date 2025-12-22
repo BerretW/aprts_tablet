@@ -46,6 +46,45 @@ AddEventHandler('aprts_tablet:client:loadTablet', function(serial, model, dbData
         isTabletOpen = true
         currentSerial = serial
         currentModel = model 
+        
+        -- ============================================================
+        -- OPRAVA: Okamžité obnovení session PŘED zjištěním signálu
+        -- ============================================================
+        if dbData.savedNetworks then
+            -- Zavoláme export, který jsme vytvořili v kroku 1
+            exports['aprts_tablet']:RestoreWifiSession(dbData.savedNetworks)
+        end
+        -- ============================================================
+
+        -- Nyní, když zavoláme GetBestWifiSignal, už bude síť v AuthenticatedRouters
+        local ped = PlayerPedId()
+        local pos = GetEntityCoords(ped)
+        local initialWifiState = false
+        local initialWifiName = "Žádný signál"
+        local initialWifiLevel = 0
+        local initialWifiLocked = false
+
+        -- Logika SIM Karty (přednost)
+        if Config.Tablets[currentModel] and Config.Tablets[currentModel].hasSimCard then
+            initialWifiState = true
+            initialWifiName = "4G LTE"
+            initialWifiLevel = 4
+        else
+            -- Logika Wifi
+            if GetBestWifiSignal then
+                local signal = GetBestWifiSignal(pos)
+                
+                initialWifiState = signal.connected
+                initialWifiName = signal.name
+                initialWifiLevel = signal.level
+                initialWifiLocked = signal.isLocked -- Zde by nyní mělo být false, pokud sedí heslo!
+                
+                -- Aktualizujeme globální proměnné pro client smyčku
+                hasInternet = initialWifiState
+                currentWifiName = initialWifiName
+                currentWifiLevel = initialWifiLevel
+            end
+        end
 
         batteryHistory = dbData.batteryHistory or {}
 
@@ -58,11 +97,18 @@ AddEventHandler('aprts_tablet:client:loadTablet', function(serial, model, dbData
             bootTime = tabletConfig.bootTime,
             serial = serial,
             installedApps = dbData.installedApps,
+            savedNetworks = dbData.savedNetworks,
             wallpaper = dbData.background or tabletConfig.wallpaper,
             calendarEvents = dbData.calendarEvents or {},
             batteryHistory = batteryHistory,
             isLocked = metaData.isLocked,
-            pin = metaData.pin
+            pin = metaData.pin,
+            
+            -- Posíláme vypočtená data
+            wifi = initialWifiState,
+            wifiName = initialWifiName,
+            wifiLevel = initialWifiLevel,
+            wifiLocked = initialWifiLocked
         }
 
         SendNUIMessage(payload)

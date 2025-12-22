@@ -323,3 +323,34 @@ lib.callback.register('aprts_tablet:server:verifyWifi', function(source, routerI
     if not router.password then return true end -- Nemá heslo
     return router.password == inputPassword
 end)
+
+RegisterNetEvent('aprts_tablet:server:getTabletData', function(serial)
+    local src = source
+    local result = exports.oxmysql:singleSync('SELECT * FROM player_tablets WHERE serial = ?', {serial})
+    local dbData = {}
+    local battery = 100
+
+    if result then
+        dbData = json.decode(result.tablet_data) or {}
+        battery = result.battery or 100
+    else
+        -- Vytvoříme fake data pro debug
+        dbData = { installedApps = {'store', 'settings', 'calendar'}, background = 'none' }
+    end
+    
+    -- Načtení kalendáře
+    local calendarRows = exports.oxmysql:executeSync('SELECT * FROM player_tablets_calendar WHERE serial = ?', {serial})
+    local formattedCalendar = {}
+    for _, row in ipairs(calendarRows) do
+        local key = row.event_date
+        if not formattedCalendar[key] then formattedCalendar[key] = {} end
+        table.insert(formattedCalendar[key], { id = row.id, time = row.event_time, title = row.title })
+    end
+    dbData.calendarEvents = formattedCalendar
+
+    TriggerClientEvent('aprts_tablet:client:loadTablet', src, serial, 'tablet_basic', dbData, {
+        isLocked = false,
+        pin = "0000",
+        battery = battery
+    })
+end)

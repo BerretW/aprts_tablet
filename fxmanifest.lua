@@ -42,8 +42,9 @@ client_scripts {
     'client/battery.lua',   -- 3. Logika nabíjení
     'client/apps.lua',      -- 4. Registrace aplikací
     'client/nui.lua',       -- 5. NUI Callbacky
+    'client/wifi.lua',      -- 7. Wi-Fi Logika
     'client/main.lua'       -- 6. Hlavní smyčka a eventy
-    ,'client/wifi.lua'      -- 7. Wi-Fi Logika
+
 }
 server_script 'server.lua'
 

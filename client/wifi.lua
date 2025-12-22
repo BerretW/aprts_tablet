@@ -287,3 +287,56 @@ RegisterNUICallback('connectToWifi', function(data, cb)
         end
     end
 end)
+
+RegisterNetEvent('aprts_tablet:client:restoreWifi', function(savedNetworks)
+    if not savedNetworks then return end
+    
+    -- Projdeme uložené sítě z DB
+    for ssid, password in pairs(savedNetworks) do
+        -- Najdeme router/zónu podle SSID
+        
+        -- 1. Kontrola statických zón
+        for _, zone in pairs(Config.WifiZones) do
+            if zone.label == ssid and zone.password == password then
+                AuthenticatedRouters["static_" .. zone.label] = true
+            end
+        end
+
+        -- 2. Kontrola routerů hráčů
+        for id, router in pairs(LocalRouters) do
+            if router.ssid == ssid and router.password == password then
+                AuthenticatedRouters[router.id] = true
+            end
+        end
+    end
+end)
+
+function RestoreWifiSession(savedNetworks)
+    if not savedNetworks then return end
+    
+    -- Debug výpis
+    print("[Wifi] Obnovuji uložené sítě...")
+
+    for savedSSID, savedPass in pairs(savedNetworks) do
+        -- 1. Kontrola statických zón (Config)
+        for _, zone in pairs(Config.WifiZones) do
+            -- Porovnáváme název sítě a heslo
+            if zone.label == savedSSID and zone.password == savedPass then
+                local zoneId = "static_" .. zone.label
+                AuthenticatedRouters[zoneId] = true
+                print("[Wifi] Odemčena statická zóna: " .. savedSSID)
+            end
+        end
+
+        -- 2. Kontrola hráčských routerů
+        for id, router in pairs(LocalRouters) do
+            if router.ssid == savedSSID and router.password == savedPass then
+                AuthenticatedRouters[router.id] = true
+                print("[Wifi] Odemčen router: " .. savedSSID)
+            end
+        end
+    end
+end
+
+-- Registrace exportu, abychom to mohli zavolat z main.lua
+exports('RestoreWifiSession', RestoreWifiSession)
