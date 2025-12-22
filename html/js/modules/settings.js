@@ -139,14 +139,14 @@ System.registerModule("settings", {
   },
 
   // ==========================================================================
-  // FUNKCE PRO SKENOVÁNÍ SÍTÍ
+  // SKENOVÁNÍ SÍTÍ (Upravený vzhled tlačítek)
   // ==========================================================================
   scanNetworks: function() {
-      // Zavoláme LUA callback 'getWifiList'
+      $("#wifi-scanner-icon").addClass("fa-spin").show();
+      
       $.post('https://aprts_tablet/getWifiList', JSON.stringify({}), function(networks) {
-          
+          $("#wifi-scanner-icon").removeClass("fa-spin").hide();
           let container = $("#wifi-list-container");
-          $("#wifi-scanner-icon").removeClass("fa-spin").hide(); // Zastavíme točící ikonu
           
           if(!networks || networks.length === 0) {
               container.html(`<div style="padding:15px; text-align:center; opacity:0.5; font-size:12px;">Žádné sítě v dosahu.</div>`);
@@ -154,41 +154,42 @@ System.registerModule("settings", {
           }
 
           let html = "";
-          // Aktuální připojená síť (z status baru)
-          let currentConnected = $("#network-name").text().split('(')[0].trim();
-
           networks.forEach(net => {
-              let isLocked = net.auth;
-              let isConnected = (currentConnected === net.ssid);
-              let iconColor = isConnected ? "#00b894" : (isLocked ? "#fdcb6e" : "#b2bec3");
-              let iconClass = isLocked ? "fa-lock" : "fa-wifi";
+              // Ikona a barva podle stavu
+              let iconClass = net.auth ? "fa-lock" : "fa-wifi";
+              let color = net.isConnected ? "#00b894" : (net.isSaved ? "#0984e3" : "#b2bec3");
               
-              // Tlačítko Připojit nebo Text Připojeno
+              let statusText = "";
               let actionBtn = "";
-              if (isConnected) {
-                  actionBtn = `<span style="font-size:10px; color:#00b894; font-weight:bold;">PŘIPOJENO</span>`;
+
+              if (net.isConnected) {
+                  // STAV: PŘIPOJENO
+                  statusText = `<span style="color:#00b894; font-weight:bold; margin-left:5px;">Připojeno</span>`;
+                  actionBtn = `<button onclick="System.Apps.settings.disconnectNet('${net.ssid}')" class="wifi-action-btn wifi-btn-disconnect">Odpojit</button>`;
+              
+              } else if (net.isSaved) {
+                  // STAV: ULOŽENO (Ale nepřipojeno)
+                  statusText = `<span style="opacity:0.7; margin-left:5px;">Uloženo</span>`;
+                  actionBtn = `<button onclick="System.Apps.settings.connectNet('${net.ssid}', null)" class="wifi-action-btn wifi-btn-saved">Připojit</button>`;
+              
               } else {
-                  // Pokud je zamčená, voláme connectToProtectedWifi, jinak connectToWifi (bez hesla)
-                  let clickAction = isLocked ? `System.connectToProtectedWifi('${net.ssid}')` : `System.connectToProtectedWifi('${net.ssid}')`; 
-                  // Poznámka: connectToProtectedWifi v system.js už zvládá otevření dialogu, 
-                  // ale pokud by síť byla open, server to ověří i bez hesla.
-                  // Pro jednoduchost voláme stejnou funkci, user prostě odklepne prázdné heslo nebo upravíme system.js
-                  
-                  actionBtn = `<button onclick="${clickAction}" style="background:rgba(255,255,255,0.1); border:none; color:white; padding:5px 10px; border-radius:6px; cursor:pointer; font-size:10px;">Připojit</button>`;
+                  // STAV: OSTATNÍ (Nové sítě)
+                  // Pokud je zamčená, zeptá se na heslo, jinak připojí rovnou
+                  let clickAction = net.auth ? `System.Apps.settings.promptPass('${net.ssid}')` : `System.Apps.settings.connectNet('${net.ssid}', '')`;
+                  actionBtn = `<button onclick="${clickAction}" class="wifi-action-btn wifi-btn-connect">Připojit</button>`;
               }
 
               html += `
-                <div style="padding: 12px 15px; border-bottom: 1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between; align-items:center;">
-                    <div style="display:flex; align-items:center; gap:12px;">
-                        <i class="fas ${iconClass}" style="font-size:14px; color:${iconColor}; width:15px; text-align:center;"></i>
-                        <div style="display:flex; flex-direction:column;">
-                            <span style="font-weight:600; font-size:13px;">${net.ssid}</span>
-                            <span style="font-size:10px; opacity:0.5;">Signál: ${net.level}% ${net.type === 'public' ? '(Veřejná)' : ''}</span>
-                        </div>
-                    </div>
-                    ${actionBtn}
-                </div>
-              `;
+              <div class="wifi-item" style="padding: 12px 15px; border-bottom: 1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between; align-items:center; transition: background 0.2s;">
+                  <div style="display:flex; align-items:center; gap:12px;">
+                      <i class="fas ${iconClass}" style="color:${color}; font-size: 14px; width: 20px; text-align:center;"></i>
+                      <div style="display:flex; flex-direction:column;">
+                          <div style="font-weight:600; font-size:13px; letter-spacing:0.3px;">${net.ssid}</div>
+                          <div style="font-size:10px; opacity:0.5; margin-top:2px;">Signál: ${net.level}% ${statusText}</div>
+                      </div>
+                  </div>
+                  ${actionBtn}
+              </div>`;
           });
           
           container.html(html);
@@ -276,7 +277,44 @@ System.registerModule("settings", {
     });
   },
 
-  // --- HELPERS (Stejné jako předtím) ---
+  // --- HELPERS ---
+
+  promptPass: function(ssid) {
+    Swal.fire({
+        title: `Heslo pro ${ssid}`,
+        input: 'password',
+        background: '#1e1e1e',
+        color: '#fff',
+        showCancelButton: true,
+        confirmButtonText: 'Připojit'
+    }).then((result) => {
+        if(result.isConfirmed) {
+            this.connectNet(ssid, result.value);
+        }
+    });
+},
+
+connectNet: function(ssid, password) {
+    $.post('https://aprts_tablet/connectToWifi', JSON.stringify({
+        ssid: ssid,
+        password: password
+    }), (response) => {
+        if(response.status === 'ok') {
+            System.API.showNotification({title: "Wi-Fi", text: "Úspěšně připojeno", icon: "success", toast: true});
+            this.scanNetworks(); // Refresh listu
+        } else {
+            System.API.showNotification({title: "Chyba", text: response.message || "Nelze se připojit", icon: "error", toast: true});
+        }
+    });
+},
+
+disconnectNet: function(ssid) {
+    $.post('https://aprts_tablet/forgetNetwork', JSON.stringify({ssid: ssid}), () => {
+        this.scanNetworks();
+    });
+},
+
+
   forgetNetwork: function(ssid) {
       if(AppState.savedNetworks[ssid]) {
           delete AppState.savedNetworks[ssid];

@@ -1,21 +1,24 @@
 -- ====================================================================
 -- FILE: client/main.lua
+-- Popis: Hlavní smyčka, otevírání tabletu a správa stavu
 -- ====================================================================
 
 -- ====================================================================
--- 1. POUŽITÍ PŘEDMĚTU
+-- 1. POUŽITÍ PŘEDMĚTU (EXPORT)
 -- ====================================================================
 exports('useTablet', function(data)
     if isTabletOpen then return end
     
     if data and data.slot then
         StartTabletAnimation()
+        -- Požádáme server o data tabletu na tomto slotu
         TriggerServerEvent('aprts_tablet:server:openBySlot', data.slot)
     else
         print('^1[Tablet] Chyba: Neplatná data z inventáře!^0')
     end
 end)
 
+-- Debug příkazy
 RegisterCommand('tabletdebug', function(source, args)
     local serial = "DEBUG-001"
     currentSerial = serial
@@ -48,48 +51,54 @@ AddEventHandler('aprts_tablet:client:loadTablet', function(serial, model, dbData
         currentModel = model 
         
         -- ============================================================
-        -- OPRAVA: Okamžité obnovení session PŘED zjištěním signálu
+        -- NOVÉ: Předání uložených sítí do WiFi modulu
         -- ============================================================
         if dbData.savedNetworks then
-            -- Zavoláme export, který jsme vytvořili v kroku 1
-            exports['aprts_tablet']:RestoreWifiSession(dbData.savedNetworks)
+            -- Odesíláme data do client/wifi.lua
+            TriggerEvent('aprts_tablet:client:loadSavedNetworks', dbData.savedNetworks)
+        else
+            TriggerEvent('aprts_tablet:client:loadSavedNetworks', {})
         end
         -- ============================================================
 
-        -- Nyní, když zavoláme GetBestWifiSignal, už bude síť v AuthenticatedRouters
         local ped = PlayerPedId()
         local pos = GetEntityCoords(ped)
+        
+        -- Inicializace hodnot pro UI
         local initialWifiState = false
         local initialWifiName = "Žádný signál"
         local initialWifiLevel = 0
         local initialWifiLocked = false
 
-        -- Logika SIM Karty (přednost)
+        -- 1. Logika SIM Karty (Má absolutní přednost)
         if Config.Tablets[currentModel] and Config.Tablets[currentModel].hasSimCard then
             initialWifiState = true
             initialWifiName = "4G LTE"
             initialWifiLevel = 4
         else
-            -- Logika Wifi
-            if GetBestWifiSignal then
-                local signal = GetBestWifiSignal(pos)
+            -- 2. Logika Wi-Fi (Voláme novou funkci z wifi.lua)
+            if GetWifiStatus then
+                local status = GetWifiStatus(pos)
                 
-                initialWifiState = signal.connected
-                initialWifiName = signal.name
-                initialWifiLevel = signal.level
-                initialWifiLocked = signal.isLocked -- Zde by nyní mělo být false, pokud sedí heslo!
+                initialWifiState = status.connected
+                initialWifiName = status.name
+                initialWifiLevel = status.level
+                initialWifiLocked = status.isLocked
                 
-                -- Aktualizujeme globální proměnné pro client smyčku
+                -- Aktualizace globálních proměnných
                 hasInternet = initialWifiState
                 currentWifiName = initialWifiName
                 currentWifiLevel = initialWifiLevel
             end
         end
 
+        -- Načtení historie baterie
         batteryHistory = dbData.batteryHistory or {}
 
+        -- Nastavení NUI Focusu
         SetNuiFocus(true, true)
 
+        -- Sestavení dat pro JS
         local payload = {
             action = "bootSystem",
             os = tabletConfig.os,
@@ -97,19 +106,25 @@ AddEventHandler('aprts_tablet:client:loadTablet', function(serial, model, dbData
             bootTime = tabletConfig.bootTime,
             serial = serial,
             installedApps = dbData.installedApps,
-            savedNetworks = dbData.savedNetworks,
+            savedNetworks = dbData.savedNetworks, -- Posíláme i do UI (pro Settings appku)
             wallpaper = dbData.background or tabletConfig.wallpaper,
             calendarEvents = dbData.calendarEvents or {},
             batteryHistory = batteryHistory,
             isLocked = metaData.isLocked,
             pin = metaData.pin,
             
-            -- Posíláme vypočtená data
+            -- Data o připojení
             wifi = initialWifiState,
             wifiName = initialWifiName,
             wifiLevel = initialWifiLevel,
-            wifiLocked = initialWifiLocked
+            wifiLocked = initialWifiLocked,
+            
+            -- Baterie
+            battery = metaData.battery or 100
         }
+        
+        -- Nastavíme lokální baterii podle serveru
+        currentBattery = metaData.battery or 100
 
         SendNUIMessage(payload)
     end
@@ -139,6 +154,7 @@ end)
 -- ====================================================================
 CreateThread(function()
     while true do
+        -- Interval kontroly (např. 5 sekund, nastaveno v Configu)
         Wait(Config.BatteryTick) 
 
         local ped = PlayerPedId()
@@ -148,11 +164,13 @@ CreateThread(function()
         hasInternet = false
         currentWifiName = "Žádný signál"
         currentWifiLevel = 0
-        local isLockedWifi = false -- Nová proměnná pro UI (Zámek)
+        local isLockedWifi = false 
 
-        -- 1. Logika připojení (Simkarta vs Wifi)
+        -- -----------------------------------------------------------
+        -- 1. LOGIKA PŘIPOJENÍ (SIM vs WIFI)
+        -- -----------------------------------------------------------
         
-        -- Má tablet SIM kartu? (Priorita)
+        -- Má tablet SIM kartu?
         local simCardSupport = false
         if currentModel and Config.Tablets[currentModel] and Config.Tablets[currentModel].hasSimCard then
             simCardSupport = true
@@ -165,58 +183,58 @@ CreateThread(function()
             currentWifiLevel = 4
             isLockedWifi = false
         else
-            -- Používáme Wi-Fi
-            -- Zde voláme funkci z client/wifi.lua
-            if GetBestWifiSignal then
-                local signal = GetBestWifiSignal(pos)
+            -- Používáme Wi-Fi Modul
+            if GetWifiStatus then
+                -- Tato funkce (v client/wifi.lua) řeší:
+                -- 1. Jestli jsme stále připojeni k aktuální síti (vzdálenost)
+                -- 2. Jestli se máme automaticky připojit k uložené síti
+                local status = GetWifiStatus(pos)
                 
-                hasInternet = signal.connected
-                currentWifiName = signal.name
-                currentWifiLevel = signal.level
-                isLockedWifi = signal.isLocked -- Zjistíme, jestli je síť zamčená
+                hasInternet = status.connected
+                currentWifiName = status.name
+                currentWifiLevel = status.level
+                isLockedWifi = status.isLocked -- True, pokud nejsme připojeni, ale je v dosahu zamčená síť
             else
-                -- Fallback pro případ, že wifi.lua chybí (pouze statické zóny z Configu)
-                for _, zone in pairs(Config.WifiZones) do
-                    local dist = #(pos - zone.coords)
-                    if dist < zone.radius then
-                        hasInternet = true
-                        currentWifiName = zone.label
-                        local signalPct = 1.0 - (dist / zone.radius)
-                        if signalPct > 0.8 then currentWifiLevel = 4
-                        elseif signalPct > 0.6 then currentWifiLevel = 3
-                        elseif signalPct > 0.4 then currentWifiLevel = 2
-                        else currentWifiLevel = 1 end
-                        break
-                    end
-                end
+                -- Fallback (Pokud by chyběl wifi.lua)
+                currentWifiName = "Chyba modulu"
             end
         end
 
-        -- 2. Kontrola kabelu nabíječky
+        -- -----------------------------------------------------------
+        -- 2. KONTROLA KABELU NABÍJEČKY
+        -- -----------------------------------------------------------
         if isConnectedToCharger and chargerCoords then
+            -- Pokud se hráč vzdálí od nabíječky, odpojíme ho
             if #(pos - chargerCoords) > 1.5 then
                 DisconnectCharger()
             end
         end
 
-        -- 3. Battery Logic
+        -- -----------------------------------------------------------
+        -- 3. LOGIKA BATERIE
+        -- -----------------------------------------------------------
         if isConnectedToCharger then
+            -- Nabíjení
             if currentBattery < 100 then
                 currentBattery = currentBattery + Config.BatteryChargeRate
             end
             if currentBattery > 100 then currentBattery = 100 end
 
+            -- Průběžný update do DB (při nabíjení)
             if chargingSlot and chargingSerial then
                  TriggerServerEvent('aprts_tablet:server:updateBatteryBySlot', chargingSlot, chargingSerial, math.floor(currentBattery))
             end
         elseif isTabletOpen then
+            -- Vybíjení (jen když je otevřený)
             if currentBattery > 0 then
                 currentBattery = currentBattery - Config.BatteryDrainRate
             end
             if currentBattery < 0 then currentBattery = 0 end
         end
 
-        -- 4. Ukládání historie baterie
+        -- -----------------------------------------------------------
+        -- 4. HISTORIE BATERIE (Pro graf)
+        -- -----------------------------------------------------------
         local gameTimer = GetGameTimer()
         if (gameTimer - lastHistoryUpdate) > (Config.HistoryInterval * 60000) then
             lastHistoryUpdate = gameTimer
@@ -229,35 +247,45 @@ CreateThread(function()
                 value = math.floor(currentBattery)
             })
 
+            -- Držíme jen posledních X záznamů
             if #batteryHistory > 48 then
                 table.remove(batteryHistory, 1)
             end
         end
 
-        -- 5. Odeslání dat do UI
+        -- -----------------------------------------------------------
+        -- 5. ODESLÁNÍ STAVU DO TABLETU (NUI)
+        -- -----------------------------------------------------------
         if isTabletOpen then
             local hours = GetClockHours()
             local minutes = GetClockMinutes()
+            
             SendNUIMessage({
                 action = "updateInfobar",
                 time = string.format("%02d:%02d", hours, minutes),
                 wifi = hasInternet,
                 wifiName = currentWifiName,
                 wifiLevel = currentWifiLevel,
-                wifiLocked = isLockedWifi, -- Posíláme info o zámku do JS
+                wifiLocked = isLockedWifi, -- Zobrazí zámeček v liště, pokud je signál ale nemáme heslo
                 battery = math.floor(currentBattery),
                 isCharging = isConnectedToCharger
             })
         end
 
-        -- Kritická baterie - Vypnutí tabletu
+        -- -----------------------------------------------------------
+        -- 6. KRITICKÁ BATERIE (VYPNUTÍ)
+        -- -----------------------------------------------------------
         if currentBattery <= 0 and isTabletOpen and not isConnectedToCharger then
             SetNuiFocus(false, false)
             StopTabletAnimation()
             isTabletOpen = false
             TriggerEvent('chat:addMessage', {
-                args = {'^1[Tablet]', 'Baterie kritická!'}
+                args = {'^1[Tablet]', 'Baterie kritická! Zařízení se vypnulo.'}
             })
+            -- Uložení vybitého stavu
+            if currentSerial then
+                TriggerServerEvent('aprts_tablet:server:updateBattery', currentSerial, 0)
+            end
         end
     end
 end)

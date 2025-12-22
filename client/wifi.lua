@@ -1,26 +1,37 @@
 -- client/wifi.lua
 local LocalRouters = {}
 local SpawnedProps = {}
--- Cache pro přihlášené sítě (ID routerů i statických zón)
-local AuthenticatedRouters = {} 
 
+-- STAV PŘIPOJENÍ
+local WifiState = {
+    enabled = true, -- Je WiFi modul v tabletu zapnutý?
+    connected = false, -- Jsme aktuálně připojeni?
+    currentSSID = nil, -- Název sítě
+    currentLevel = 0, -- Síla signálu (1-4)
+    savedNetworks = {} -- Cache uložených hesel { ['SSID'] = 'password' }
+}
 -- ====================================================================
--- SYNCHRONIZACE DAT
+-- INITIAL SYNC (Přidat na začátek client/wifi.lua)
 -- ====================================================================
-
 AddEventHandler("onClientResourceStart", function(resourceName)
     if GetCurrentResourceName() ~= resourceName then
         return
     end
+    -- Požádáme server o načtení routerů, jakmile se script zapne
     TriggerServerEvent('aprts_tablet:server:requestRouters')
 end)
 
 RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function()
+    Wait(2000) -- Malá prodleva po načtení
     TriggerServerEvent('aprts_tablet:server:requestRouters')
 end)
+-- ====================================================================
+-- SYNCHRONIZACE DAT
+-- ====================================================================
 
 RegisterNetEvent('aprts_tablet:client:syncRouters', function(data)
     LocalRouters = data
+    print(json.encode(LocalRouters, { indent = true }))
     RefreshRouterProps()
 end)
 
@@ -31,200 +42,127 @@ end)
 
 RegisterNetEvent('aprts_tablet:client:removeRouter', function(routerId)
     if SpawnedProps[routerId] then
-        if DoesEntityExist(SpawnedProps[routerId]) then DeleteEntity(SpawnedProps[routerId]) end
+        if DoesEntityExist(SpawnedProps[routerId]) then
+            DeleteEntity(SpawnedProps[routerId])
+        end
         SpawnedProps[routerId] = nil
     end
     LocalRouters[routerId] = nil
 end)
 
-lib.callback.register('aprts_tablet:client:openRouterDialog', function()
-    local input = lib.inputDialog('Nastavení Routeru', {
-        {type = 'input', label = 'Název sítě (SSID)', required = true},
-        {type = 'input', label = 'Heslo (Nepovinné)', password = true},
-    })
-    return input
+-- ====================================================================
+-- LOGIKA PŘIPOJENÍ A SKENOVÁNÍ
+-- ====================================================================
+
+-- Načtení uložených sítí při startu tabletu
+RegisterNetEvent('aprts_tablet:client:loadSavedNetworks', function(networks)
+    WifiState.savedNetworks = networks or {}
 end)
 
--- ====================================================================
--- PROPS & TARGETING
--- ====================================================================
-function SpawnRouterProp(router)
-    local cfg = Config.RouterTypes[router.type]
-    if not cfg then return end
-    
-    local model = GetHashKey(cfg.prop)
-    RequestModel(model)
-    while not HasModelLoaded(model) do Wait(10) end
-    
-    local obj = CreateObject(model, router.coords.x, router.coords.y, router.coords.z, false, false, false)
-    FreezeEntityPosition(obj, true)
-    SetEntityHeading(obj, 0.0)
-    PlaceObjectOnGroundProperly(obj)
-    
-    SpawnedProps[router.id] = obj
-    
-    if exports.ox_target then
-        exports.ox_target:addLocalEntity(obj, {
-            {
-                name = 'pickup_router',
-                icon = 'fas fa-hand-holding',
-                label = 'Sebrat router ('..router.ssid..')',
-                onSelect = function()
-                    TriggerServerEvent('aprts_tablet:server:pickupRouter', router.id)
+-- Hlavní funkce pro získání aktuálního stavu (volá main.lua ve smyčce)
+function GetWifiStatus(playerCoords)
+    -- Pokud je WiFi vypnutá uživatelem
+    if not WifiState.enabled then
+        return {
+            connected = false,
+            name = "Wi-Fi vypnuta",
+            level = 0,
+            isLocked = false
+        }
+    end
+
+    -- 1. Získání všech sítí v dosahu
+    local networksInRage = GetNearbyNetworksRaw(playerCoords)
+
+    -- 2. Logika aktuálního připojení
+    if WifiState.connected and WifiState.currentSSID then
+        -- Jsme připojeni, zkontrolujeme, zda jsme stále v dosahu
+        local stillInRange = false
+        local currentSignalLevel = 0
+
+        for _, net in ipairs(networksInRage) do
+            if net.ssid == WifiState.currentSSID then
+                stillInRange = true
+                currentSignalLevel = net.levelPct -- Převedeme na 1-4
+                break
+            end
+        end
+
+        if stillInRange then
+            -- Aktualizujeme sílu signálu
+            if currentSignalLevel > 80 then
+                WifiState.currentLevel = 4
+            elseif currentSignalLevel > 60 then
+                WifiState.currentLevel = 3
+            elseif currentSignalLevel > 40 then
+                WifiState.currentLevel = 2
+            else
+                WifiState.currentLevel = 1
+            end
+        else
+            -- Ztratili jsme signál
+            DisconnectWifi("Ztráta signálu")
+        end
+    else
+        -- Nejsme připojeni -> Zkusíme AUTO-CONNECT na uložené sítě
+        for _, net in ipairs(networksInRage) do
+            local savedPass = WifiState.savedNetworks[net.ssid]
+
+            -- Pokud je síť uložená NEBO je veřejná (bez hesla)
+            if savedPass or not net.auth then
+                -- Simulace pokusu o připojení
+                if ConnectToWifi(net.ssid, savedPass) then
+                    break -- Připojeno, končíme cyklus
                 end
-            }
-        })
+            end
+        end
     end
-end
 
-function RefreshRouterProps()
-    for id, entity in pairs(SpawnedProps) do
-        if DoesEntityExist(entity) then DeleteEntity(entity) end
-    end
-    SpawnedProps = {}
-    for id, router in pairs(LocalRouters) do
-        SpawnRouterProp(router)
-    end
-end
-
-AddEventHandler('onResourceStop', function(res)
-    if res == GetCurrentResourceName() then
-        for _, entity in pairs(SpawnedProps) do DeleteEntity(entity) end
-    end
-end)
-
--- ====================================================================
--- LOGIKA SIGNÁLU (UPRAVENO PRO STATICKÁ HESLA)
--- ====================================================================
-
-function GetBestWifiSignal(playerCoords)
-    local bestSignal = {
-        connected = false,
-        name = "Žádný signál",
-        level = 0,
-        isLocked = false,
-        routerId = nil,
-        isStatic = false -- Flag pro rozlišení v callbacku
+    return {
+        connected = WifiState.connected,
+        name = WifiState.connected and WifiState.currentSSID or "Nepřipojeno",
+        level = WifiState.currentLevel,
+        isLocked = (not WifiState.connected) -- Pro UI ikonu zámku
     }
-    
-    -- 1. Kontrola Config Zón
-    for _, zone in pairs(Config.WifiZones) do
-        local dist = #(playerCoords - zone.coords)
-        if dist < zone.radius then
-            local lvl = 1
-            local signalPct = 1.0 - (dist / zone.radius)
-            if signalPct > 0.8 then lvl = 4
-            elseif signalPct > 0.6 then lvl = 3
-            elseif signalPct > 0.4 then lvl = 2 end
-            
-            if lvl > bestSignal.level then
-                -- ID pro statickou zónu (např: "static_Police Station")
-                local zoneId = "static_" .. zone.label 
-                
-                bestSignal.name = zone.label
-                bestSignal.level = lvl
-                bestSignal.routerId = zoneId
-                bestSignal.isStatic = true
-                
-                -- Kontrola hesla u statické zóny
-                if zone.password and zone.password ~= "" then
-                    -- Je zamčená, pokud nejsme v session cache
-                    if not AuthenticatedRouters[zoneId] then
-                        bestSignal.isLocked = true
-                        bestSignal.connected = false 
-                    else
-                        bestSignal.isLocked = false
-                        bestSignal.connected = true
-                    end
-                else
-                    -- Nemá heslo = je veřejná
-                    bestSignal.isLocked = false
-                    bestSignal.connected = true
-                end
-            end
-        end
-    end
-    
-    -- 2. Kontrola Hráčských Routerů
-    for id, router in pairs(LocalRouters) do
-        local cfg = Config.RouterTypes[router.type]
-        local radius = cfg and cfg.range or 15.0
-        local dist = #(playerCoords - vector3(router.coords.x, router.coords.y, router.coords.z))
-        
-        if dist < radius then
-            local lvl = 1
-            local signalPct = 1.0 - (dist / radius)
-            if signalPct > 0.8 then lvl = 4
-            elseif signalPct > 0.6 then lvl = 3
-            elseif signalPct > 0.4 then lvl = 2 end
-            
-            if lvl > bestSignal.level then
-                bestSignal.name = router.ssid
-                bestSignal.level = lvl
-                bestSignal.routerId = router.id
-                bestSignal.isStatic = false
-                
-                if router.password and router.password ~= "" then
-                    if not AuthenticatedRouters[router.id] then
-                        bestSignal.isLocked = true
-                        bestSignal.connected = false
-                    else
-                        bestSignal.isLocked = false
-                        bestSignal.connected = true
-                    end
-                else
-                    bestSignal.isLocked = false
-                    bestSignal.connected = true
-                end
-            end
-        end
-    end
-    
-    return bestSignal
 end
 
--- ====================================================================
--- SKENOVÁNÍ SÍTÍ PRO UI (SETTINGS)
--- ====================================================================
-function GetNearbyNetworks()
+-- Interní funkce pro sken okolí (vrací raw data)
+function GetNearbyNetworksRaw(coords)
     local networks = {}
-    local ped = PlayerPedId()
-    local pos = GetEntityCoords(ped)
     local addedSSIDs = {}
 
     -- 1. Config Zóny
     for _, zone in pairs(Config.WifiZones) do
-        local dist = #(pos - zone.coords)
+        local dist = #(coords - zone.coords)
         if dist < zone.radius then
             local signalPct = math.floor((1.0 - (dist / zone.radius)) * 100)
             if signalPct > 0 then
                 table.insert(networks, {
                     ssid = zone.label,
-                    level = signalPct,
-                    auth = (zone.password ~= nil and zone.password ~= ""), -- True pokud má heslo
-                    type = 'public'
+                    levelPct = signalPct,
+                    auth = (zone.password ~= nil and zone.password ~= ""),
+                    password = zone.password
                 })
                 addedSSIDs[zone.label] = true
             end
         end
     end
 
-    -- 2. Routery
-    for id, router in pairs(LocalRouters) do
+    -- 2. Hráčské Routery
+    for _, router in pairs(LocalRouters) do
         if not addedSSIDs[router.ssid] then
             local cfg = Config.RouterTypes[router.type]
             local radius = cfg and cfg.range or 15.0
-            local dist = #(pos - vector3(router.coords.x, router.coords.y, router.coords.z))
-            
+            local dist = #(coords - vector3(router.coords.x, router.coords.y, router.coords.z))
+
             if dist < radius then
                 local signalPct = math.floor((1.0 - (dist / radius)) * 100)
                 if signalPct > 0 then
-                    local isLocked = (router.password and router.password ~= "")
                     table.insert(networks, {
                         ssid = router.ssid,
-                        level = signalPct,
-                        auth = isLocked,
-                        type = 'private'
+                        levelPct = signalPct,
+                        auth = (router.password ~= nil and router.password ~= ""),
+                        password = router.password -- Pro lokální ověření, server to jistí
                     })
                     addedSSIDs[router.ssid] = true
                 end
@@ -232,111 +170,171 @@ function GetNearbyNetworks()
         end
     end
 
-    table.sort(networks, function(a, b) return a.level > b.level end)
+    table.sort(networks, function(a, b)
+        return a.levelPct > b.levelPct
+    end)
     return networks
 end
 
-RegisterNUICallback('getWifiList', function(data, cb)
-    cb(GetNearbyNetworks())
-end)
+-- Funkce pro pokus o připojení
+function ConnectToWifi(ssid, password)
+    -- Ověření přes server (nebo lokálně pro config zóny pro rychlost)
+    local success = false
 
--- Callback pro pokus o připojení
-RegisterNUICallback('connectToWifi', function(data, cb)
-    local password = data.password
-    local ped = PlayerPedId()
-    -- Znovu načteme nejsilnější signál, abychom věděli, kam se připojujeme
-    -- (V ideálním případě by ID sítě mělo přijít z JS, ale toto pro zjednodušení stačí, pokud stojíš u routeru)
-    local signal = GetBestWifiSignal(GetEntityCoords(ped))
-    
-    if not signal.routerId then
-        cb({status = 'error', message = 'Žádná síť v dosahu'})
-        return
+    -- Rychlý pre-check (jsme vůbec v dosahu?)
+    local networks = GetNearbyNetworksRaw(GetEntityCoords(PlayerPedId()))
+    local targetNet = nil
+    for _, net in ipairs(networks) do
+        if net.ssid == ssid then
+            targetNet = net
+            break
+        end
     end
 
-    -- Rozlišení Statická vs Dynamická
-    if signal.isStatic then
-        -- Hledání v Configu podle Labelu (který je uložen v signal.name)
-        local correctPassword = nil
-        for _, zone in pairs(Config.WifiZones) do
-            if zone.label == signal.name then
-                correctPassword = zone.password
-                break
-            end
-        end
+    if not targetNet then
+        return false
+    end
 
-        if correctPassword == password then
-            AuthenticatedRouters[signal.routerId] = true
-            cb({status = 'ok'})
-        else
-            cb({status = 'error'})
-        end
+    -- Ověření
+    if not targetNet.auth then
+        success = true -- Veřejná síť
+    elseif targetNet.password == password then
+        success = true -- Heslo sedí (lokální check)
     else
-        -- Dynamický router -> Server callback
-        if signal.isLocked then
-            local success = lib.callback.await('aprts_tablet:server:verifyWifi', false, signal.routerId, password)
-            if success then
-                AuthenticatedRouters[signal.routerId] = true
-                cb({status = 'ok'})
-            else
-                cb({status = 'error'})
-            end
-        else
-            -- Nemá heslo, připojíme rovnou
-            AuthenticatedRouters[signal.routerId] = true
-            cb({status = 'ok'})
-        end
+        -- Fallback na server check (pro dynamické routery bezpečnější)
+        success = lib.callback.await('aprts_tablet:server:verifyWifi', false, ssid, password)
     end
-end)
 
-RegisterNetEvent('aprts_tablet:client:restoreWifi', function(savedNetworks)
-    if not savedNetworks then return end
-    
-    -- Projdeme uložené sítě z DB
-    for ssid, password in pairs(savedNetworks) do
-        -- Najdeme router/zónu podle SSID
-        
-        -- 1. Kontrola statických zón
-        for _, zone in pairs(Config.WifiZones) do
-            if zone.label == ssid and zone.password == password then
-                AuthenticatedRouters["static_" .. zone.label] = true
-            end
-        end
+    if success then
+        WifiState.connected = true
+        WifiState.currentSSID = ssid
+        WifiState.currentLevel = 4 -- Inicializace
 
-        -- 2. Kontrola routerů hráčů
-        for id, router in pairs(LocalRouters) do
-            if router.ssid == ssid and router.password == password then
-                AuthenticatedRouters[router.id] = true
-            end
+        -- Uložit do cache, pokud bylo zadáno heslo
+        if password then
+            WifiState.savedNetworks[ssid] = password
+            -- Trigger server save event (aktualizace DB)
+            TriggerServerEvent('aprts_tablet:server:saveKnownNetwork', ssid, password)
         end
+        return true
     end
-end)
 
-function RestoreWifiSession(savedNetworks)
-    if not savedNetworks then return end
-    
-    -- Debug výpis
-    print("[Wifi] Obnovuji uložené sítě...")
+    return false
+end
 
-    for savedSSID, savedPass in pairs(savedNetworks) do
-        -- 1. Kontrola statických zón (Config)
-        for _, zone in pairs(Config.WifiZones) do
-            -- Porovnáváme název sítě a heslo
-            if zone.label == savedSSID and zone.password == savedPass then
-                local zoneId = "static_" .. zone.label
-                AuthenticatedRouters[zoneId] = true
-                print("[Wifi] Odemčena statická zóna: " .. savedSSID)
-            end
-        end
-
-        -- 2. Kontrola hráčských routerů
-        for id, router in pairs(LocalRouters) do
-            if router.ssid == savedSSID and router.password == savedPass then
-                AuthenticatedRouters[router.id] = true
-                print("[Wifi] Odemčen router: " .. savedSSID)
-            end
-        end
+function DisconnectWifi(reason)
+    WifiState.connected = false
+    WifiState.currentSSID = nil
+    WifiState.currentLevel = 0
+    if reason then
+        print("[WiFi] Odpojeno: " .. reason)
     end
 end
 
--- Registrace exportu, abychom to mohli zavolat z main.lua
-exports('RestoreWifiSession', RestoreWifiSession)
+-- ====================================================================
+-- NUI CALLBACKS
+-- ====================================================================
+
+-- Zapnutí/Vypnutí modulu
+RegisterNUICallback('toggleWifiState', function(data, cb)
+    WifiState.enabled = data.enabled
+    if not data.enabled then
+        DisconnectWifi("Uživatel vypnul WiFi")
+    end
+    cb('ok')
+end)
+
+-- Získání seznamu sítí pro UI
+RegisterNUICallback('getWifiList', function(data, cb)
+    if not WifiState.enabled then
+        cb({})
+        return
+    end
+
+    local raw = GetNearbyNetworksRaw(GetEntityCoords(PlayerPedId()))
+    local uiList = {}
+
+    for _, net in ipairs(raw) do
+        table.insert(uiList, {
+            ssid = net.ssid,
+            level = net.levelPct,
+            auth = net.auth,
+            isSaved = (WifiState.savedNetworks[net.ssid] ~= nil),
+            isConnected = (WifiState.currentSSID == net.ssid)
+        })
+    end
+    cb(uiList)
+end)
+
+-- Ruční připojení z UI
+RegisterNUICallback('connectToWifi', function(data, cb)
+    local ssid = data.ssid
+    local password = data.password
+
+    -- Pokud máme uložené heslo a uživatel ho nezadal znovu
+    if not password and WifiState.savedNetworks[ssid] then
+        password = WifiState.savedNetworks[ssid]
+    end
+
+    local success = ConnectToWifi(ssid, password)
+
+    if success then
+        cb({
+            status = 'ok'
+        })
+    else
+        cb({
+            status = 'error',
+            message = 'Nesprávné heslo nebo chyba připojení'
+        })
+    end
+end)
+
+-- Odpojení / Zapomenutí sítě
+RegisterNUICallback('forgetNetwork', function(data, cb)
+    local ssid = data.ssid
+
+    if WifiState.currentSSID == ssid then
+        DisconnectWifi("Uživatel se odpojil")
+    end
+
+    if WifiState.savedNetworks[ssid] then
+        WifiState.savedNetworks[ssid] = nil
+        TriggerServerEvent('aprts_tablet:server:removeKnownNetwork', ssid)
+    end
+    cb('ok')
+end)
+
+-- ====================================================================
+-- PROP HANDLING (Zůstává stejné)
+-- ====================================================================
+function SpawnRouterProp(router)
+    print("Spawning router prop for ID: " .. router.id)
+    local cfg = Config.RouterTypes[router.type]
+    if not cfg then
+        return
+    end
+    local model = GetHashKey(cfg.prop)
+    RequestModel(model)
+    while not HasModelLoaded(model) do
+        Wait(10)
+    end
+    local obj = CreateObject(model, router.coords.x, router.coords.y, router.coords.z, false, false, false)
+    FreezeEntityPosition(obj, true)
+    SetEntityHeading(obj, 0.0)
+    PlaceObjectOnGroundProperly(obj)
+    SpawnedProps[router.id] = obj
+end
+
+function RefreshRouterProps()
+    print("Refreshing all router props...")
+    for id, entity in pairs(SpawnedProps) do
+        if DoesEntityExist(entity) then
+            DeleteEntity(entity)
+        end
+    end
+    SpawnedProps = {}
+    for id, router in pairs(LocalRouters) do
+        SpawnRouterProp(router)
+    end
+end

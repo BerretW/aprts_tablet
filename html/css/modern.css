@@ -309,3 +309,53 @@
     padding: 6px 20px; border-radius: 20px; cursor: pointer;
 }
 .btn-cancel:hover { background: #333; color: white; }
+
+.wifi-action-btn {
+    border: none;
+    padding: 6px 14px;
+    border-radius: 8px; /* Zaoblené rohy */
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    outline: none;
+}
+
+/* Tlačítko Připojit (Neutrální / Šedé průhledné) */
+.wifi-btn-connect {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.wifi-btn-connect:hover {
+    background-color: rgba(255, 255, 255, 0.25);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+/* Tlačítko Uloženo/Rychlé připojení (Modré) */
+.wifi-btn-saved {
+    background-color: #0984e3;
+    color: #ffffff;
+    box-shadow: 0 2px 5px rgba(9, 132, 227, 0.3);
+}
+.wifi-btn-saved:hover {
+    background-color: #74b9ff;
+    transform: translateY(-1px);
+}
+
+/* Tlačítko Odpojit (Červené / Jemné) */
+.wifi-btn-disconnect {
+    background-color: rgba(214, 48, 49, 0.15); /* Průhledná červená */
+    color: #ff7675;
+    border: 1px solid rgba(214, 48, 49, 0.2);
+}
+.wifi-btn-disconnect:hover {
+    background-color: #d63031;
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(214, 48, 49, 0.3);
+}

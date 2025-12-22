@@ -60,15 +60,37 @@ const System = {
       bootTime: payload.bootTime || 2000,
       wallpaper: payload.wallpaper,
     };
+
+    // --- OPRAVA CHYBY ZDE ---
+    // Bezpečné načtení baterie. Pokud je historie prázdná, použijeme payload.battery nebo 100.
+    let currentBatteryVal = 100;
+    if (payload.batteryHistory && payload.batteryHistory.length > 0) {
+        let lastEntry = payload.batteryHistory[payload.batteryHistory.length - 1];
+        if (lastEntry && lastEntry.value !== undefined) {
+            currentBatteryVal = lastEntry.value;
+        }
+    } else if (payload.battery !== undefined) {
+        currentBatteryVal = payload.battery;
+    }
+
+    // Inicializace pole historie v AppState (aby nebylo undefined pro grafy)
+    if (payload.batteryHistory && payload.batteryHistory.length > 0) {
+      AppState.batteryHistory = payload.batteryHistory;
+    } else {
+      AppState.batteryHistory = [{ time: "Teď", value: currentBatteryVal }];
+    }
+
     UI.updateStatusBar(
         "00:00", // Čas se aktualizuje později sám
         payload.wifi,
         payload.wifiName,
         payload.wifiLevel,
-        payload.batteryHistory[payload.batteryHistory.length - 1].value || 100,
+        currentBatteryVal, // Zde už posíláme bezpečnou hodnotu
         false,
         payload.wifiLocked
     );
+    // ------------------------
+
     AppState.activeApp = null;
     UI.showAppFrame(false);
     UI.applyTheme(AppState.currentConfig.os, AppState.currentConfig.wallpaper);
@@ -86,12 +108,6 @@ const System = {
         : '<div class="boot-logo-icon"><i class="fab fa-apple" style="font-size:60px;"></i></div>';
 
     $("#boot-logo").html(bootText);
-
-    if (payload.batteryHistory && payload.batteryHistory.length > 0) {
-      AppState.batteryHistory = payload.batteryHistory;
-    } else {
-      AppState.batteryHistory = [{ time: "Teď", value: 100 }];
-    }
 
     setTimeout(() => {
       $("#boot-screen").fadeOut(300, function () {
@@ -216,22 +232,22 @@ const System = {
   },
 
   // ==========================================================================
-  // 6. WIFI PŘIPOJENÍ (OPRAVENO A PŘIDÁNO)
+  // 6. WIFI PŘIPOJENÍ
   // ==========================================================================
   connectToProtectedWifi: (ssid) => {
     // 1. Kontrola uloženého hesla
     if (AppState.savedNetworks && AppState.savedNetworks[ssid]) {
        $.post('https://aprts_tablet/connectToWifi', JSON.stringify({
+            ssid: ssid, // Důležité: poslat i SSID
             password: AppState.savedNetworks[ssid]
         }), function(response) {
             if (response.status === 'ok') {
                 System.API.showNotification({ title: 'Připojeno', text: `Připojeno k ${ssid}`, icon: 'success', toast: true });
-                // Refresh settings pokud je otevřen
                 if(AppState.activeApp === 'settings') System.Apps.settings.render();
             } else {
-                System.API.showNotification({ title: 'Chyba', text: 'Uložené heslo je nesprávné.', icon: 'error', toast: true });
+                // Pokud uložené heslo selže, smažeme ho a zkusíme dialog
                 delete AppState.savedNetworks[ssid];
-                System.connectToProtectedWifi(ssid); // Zkusit znovu ručně
+                System.connectToProtectedWifi(ssid);
             }
         });
         return; 
@@ -253,14 +269,14 @@ const System = {
         if (result.isConfirmed) {
           const password = result.value;
           $.post("https://aprts_tablet/connectToWifi", JSON.stringify({
+              ssid: ssid,
               password: password,
           }), function (response) {
               if (response.status === "ok") {
-                // Uložit heslo
+                // Uložení se děje automaticky na klientu (wifi.lua) nebo zde
                 if(!AppState.savedNetworks) AppState.savedNetworks = {};
                 AppState.savedNetworks[ssid] = password;
-                System.syncToCloud();
-
+                
                 System.API.showNotification({
                   title: "Připojeno",
                   text: "Úspěšně připojeno k Wi-Fi.",
