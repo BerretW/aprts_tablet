@@ -76,3 +76,10 @@ CreateThread(function()
     
     TriggerEvent('aprts_tablet:ready')
 end)
+
+function closeApp(appName)
+    SendNUIMessage({
+        action = "closeApp",
+        appName = appName
+    })
+end

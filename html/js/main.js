@@ -34,7 +34,9 @@ const onMessage = (event) => {
         AppState.batteryHistory.shift();
       }
       break;
-
+    case "closeApp":
+      System.goHome(); // Tato funkce již existuje v system.js a vrací na plochu
+      break;
     case "close":
       AppState.isOpen = false;
       UI.toggleTablet(false);

@@ -85,8 +85,19 @@ end
 
 -- Registrace itemů pro OX Inventory / QBCore
 for item, _ in pairs(Config.RouterTypes) do
+
+    -- exports.ox_inventory:registerHook('createItem', function(payload)
+    -- return payload
+    -- end, {
+    --     print = false,
+    --     itemFilter = { [item] = true }
+    -- })
+
+
     if QBCore then
+        print('^2[Tablet] Registrován použitelný item pro ' .. item .. '^0')
         QBCore.Functions.CreateUseableItem(item, function(source, item)
+            print('^2[Tablet] Hráč ' .. source .. ' použil item ' .. item.name .. '^0')
             UseRouterItem(source, item)
         end)
     end

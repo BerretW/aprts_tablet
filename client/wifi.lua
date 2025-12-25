@@ -338,3 +338,11 @@ function RefreshRouterProps()
         SpawnRouterProp(router)
     end
 end
+
+lib.callback.register('aprts_tablet:client:openRouterDialog', function()
+    local input = lib.inputDialog('Nastavení Routeru', {
+        {type = 'input', label = 'Název sítě (SSID)', description = 'Min. 3 znaky', required = true, min = 3, max = 20},
+        {type = 'input', label = 'Heslo', description = 'Nechte prázdné pro veřejnou síť', password = true},
+    })
+    return input
+end)

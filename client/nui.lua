@@ -92,3 +92,27 @@ exports("loadContent", function(htmlContent)
         html = htmlContent
     })
 end)
+
+-- ====================================================================
+-- EXPORT & EVENT: ZAVŘENÍ APLIKACE (NÁVRAT NA PLOCHU)
+-- ====================================================================
+
+local function CloseActiveApp()
+    if isTabletOpen then
+        SendNUIMessage({
+            action = "closeApp"
+        })
+    end
+end
+
+-- 1. Export
+exports('CloseApp', CloseActiveApp)
+
+-- 2. Event (pro volání z jiných scriptů přes TriggerEvent)
+RegisterNetEvent('aprts_tablet:client:closeApp', function()
+    CloseActiveApp()
+end)
+
+RegisterNetEvent('aprts_tablet:forceClose', function()
+    CloseActiveApp()
+end)
